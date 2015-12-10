@@ -31,7 +31,7 @@ CSOURCES+=$(shell find -L $(HW_DIR)/Libraries/STM32F4xx_StdPeriph_Driver -name '
 INC=$(shell find -L . -name '*.h' -exec dirname {} \; | uniq)
 INC+=$(shell find -L $(OS_DIR) -name '*.h' -exec dirname {} \; | uniq)
 INC+=$(shell find -L $(HW_DIR) -name '*.h' -exec dirname {} \; | uniq)
-INC+= $(EXTRALIB_DIR)/include
+INC+=$(shell find -L $(EXTRALIB_DIR)/include -name '*.h' -exec dirname {} \; | uniq)
 INCLUDES=$(INC:%=-I%)
 # Create object list
 OBJECTS+=$(CSRC_LIB:%.c=%.o)

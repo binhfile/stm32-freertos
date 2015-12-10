@@ -16,7 +16,7 @@
 #include "network/mac/mac_mrf24j40.h"
 
 #include <Test.h>
-#include <Setup.h>
+#include <setting.h>
 
 void *Thread_Startup(void*);
 void *Thread_DebugTX(void*);
@@ -37,7 +37,8 @@ int                 g_fd_led[4]         = {-1};
 int                 g_fd_button         = -1;
 volatile uint8_t	g_debug_cmd = 0;
 
-struct mac_mrf24j40	g_rf_mac;
+struct mac_mrf24j40			g_rf_mac;
+//struct setting_device		g_setting_dev;
 
 extern int board_register_devices();
 int g_thread_index = 1;
@@ -172,6 +173,23 @@ void *Thread_Startup(void *pvParameters){
     rf_mac_init.fd_intr = open_dev("rf-intr", 0);
     if(rf_mac_init.fd_intr < 0) LREP("open rf-intr device failed\r\n");
 
+//    g_setting_dev.fd_spi = open_dev("spi-4", O_RDWR);
+//    if(g_setting_dev.fd_spi < 0){
+//        LREP("open spi device failed\r\n");
+//    }
+//    else{
+//        uival = SPI_MODE_0;
+//        if(ioctl(g_setting_dev.fd_spi, SPI_IOC_WR_MODE, (unsigned int)&uival) != 0) LREP("ioctl spi mode failed\r\n");
+//        uival = 1000000;
+//        if(ioctl(g_setting_dev.fd_spi, SPI_IOC_WR_MAX_SPEED_HZ, (unsigned int)&uival) != 0) LREP("ioctl spi speed failed\r\n");
+//        else{
+//            uival = 0;
+//            if(ioctl(g_setting_dev.fd_spi, SPI_IOC_RD_MAX_SPEED_HZ, (unsigned int)&uival) == 0) LREP("ioctl spi speed = %u\r\n", uival);
+//        }
+//    }
+//    g_setting_dev.fd_cs = open_dev("spi-4-cs", 0);
+//    if(g_setting_dev.fd_cs < 0) LREP("open spi cs device failed\r\n");
+
     App_Initialize();
     // signal all other thread startup
     LREP("Thread startup is running\r\n");
@@ -182,7 +200,7 @@ void *Thread_Startup(void *pvParameters){
 MAIN_MENU:
 	LREP("------- Main menu ------\r\n");
     LREP("1. Test\r\n");
-    LREP("2. Setup\r\n");
+    LREP("2. Setting\r\n");
     LREP("3. Normal mode\r\n");
     LREP("cmd? ");
     do{
@@ -196,7 +214,7 @@ MAIN_MENU:
     		break;
     	}
     	case '2':{
-    		Setup_menu();
+    		setting_menu();
     		goto MAIN_MENU;
     		break;
     	}

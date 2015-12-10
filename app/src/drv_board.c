@@ -78,13 +78,22 @@ struct platform_device g_gpio_button_device = {
 	.id 		= gpio_get_pin('A', 0),	// A0
 	.next 		= 0,
 };
-struct platform_device g_gpio_spi1_cs_device = {
+struct platform_device g_gpio_spi2_cs_device = {
 	.dev_name 	= "spi-1-cs",
 	.name     	= "gpio-drv",
 	.dev 		= {
 		.platform_data = &g_gpio_mrf_output_data,
 	},
 	.id 		= gpio_get_pin('A', 1),
+	.next 		= 0,
+};
+struct platform_device g_gpio_spi4_cs_device = {
+	.dev_name 	= "spi-4-cs",
+	.name     	= "gpio-drv",
+	.dev 		= {
+		.platform_data = &g_gpio_mrf_output_data,
+	},
+	.id 		= gpio_get_pin('E', 4),
 	.next 		= 0,
 };
 struct platform_device g_gpio_rf_reset_device = {
@@ -106,18 +115,33 @@ struct platform_device g_gpio_rf_intr_device = {
 	.next 		= 0,
 };
 /*spi*/
-struct spi_platform_data g_spi_data = {
+struct spi_platform_data g_spi_2_data = {
 	.sck_pin 	= gpio_get_pin('B', 10),	// SPI_1
 	.ss_pin 	= GPIO_PIN_INVALID,
 	.mosi_pin 	= gpio_get_pin('C', 3),
 	.miso_pin 	= gpio_get_pin('C', 2),
 };
-struct platform_device g_spi_device = {
+struct spi_platform_data g_spi_4_data = {
+	.sck_pin 	= gpio_get_pin('E', 2),
+	.ss_pin 	= GPIO_PIN_INVALID,
+	.mosi_pin 	= gpio_get_pin('E', 6),
+	.miso_pin 	= gpio_get_pin('E', 5),
+};
+struct platform_device g_spi_2_device = {
 	.dev_name 	= "spi-1",
 	.name     	= "spidev-drv",
 	.id 	  	= 1,
 	.dev 		= {
-		.platform_data = &g_spi_data,
+		.platform_data = &g_spi_2_data,
+	},
+	.next 		= 0,
+};
+struct platform_device g_spi_4_device = {
+	.dev_name 	= "spi-3",
+	.name     	= "spidev-drv",
+	.id 	  	= 3,
+	.dev 		= {
+		.platform_data = &g_spi_4_data,
 	},
 	.next 		= 0,
 };
@@ -129,11 +153,13 @@ int board_register_devices(){
 	platform_device_register(&g_gpio_led_orange_device);
 	platform_device_register(&g_gpio_led_blue_device);
 	platform_device_register(&g_gpio_button_device);
-	platform_device_register(&g_gpio_spi1_cs_device);
+	platform_device_register(&g_gpio_spi2_cs_device);
+	platform_device_register(&g_gpio_spi4_cs_device);
 	platform_device_register(&g_gpio_rf_reset_device);
 	platform_device_register(&g_gpio_rf_intr_device);
 	
-	platform_device_register(&g_spi_device);
+	platform_device_register(&g_spi_2_device);
+	platform_device_register(&g_spi_4_device);
 	return 0;
 }
 //end of file

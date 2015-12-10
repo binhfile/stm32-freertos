@@ -5,9 +5,9 @@
  *      Author: dev
  */
 
-#include "Setup.h"
+#include "setting.h"
 #include <debug.h>
-void Setup_menu(){
+void setting_menu(){
 
 
 }
