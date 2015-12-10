@@ -9,8 +9,13 @@
 #include "debug.h"
 #include <semaphore.h>
 #include <flag_event.h>
+#include <unistd.h>
 
 extern volatile uint8_t	g_debug_cmd;
+
+#include "FreeRTOS.h"
+#include "task.h"
+volatile TickType_t t_profile_ref, t_profile_now;
 
 int	App_Initialize(){
 	return 0;

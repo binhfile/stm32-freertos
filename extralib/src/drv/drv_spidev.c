@@ -205,13 +205,12 @@ int 	spi_open	(struct platform_device *dev, int flags){
 	SPI_Init(SPIx, &g_spi_driver_arch_data.SPI_InitStruct[dev->id]); 
 	
 	// interrupt
-	//SPI_I2S_ITConfig(SPIx, SPI_I2S_IT_TXE, ENABLE);
-	SPI_I2S_ITConfig(SPIx, SPI_I2S_IT_RXNE, ENABLE);
-	NVIC_InitStructure.NVIC_IRQChannel = NVIC_IRQChannel;
-	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 7;
-	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
-	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
-	NVIC_Init(&NVIC_InitStructure);
+	//SPI_I2S_ITConfig(SPIx, SPI_I2S_IT_RXNE, ENABLE);
+	//NVIC_InitStructure.NVIC_IRQChannel = NVIC_IRQChannel;
+	//NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 7;
+	//NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
+	//NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+	//NVIC_Init(&NVIC_InitStructure);
 	SPI_Cmd(SPIx, ENABLE); // enable SPI1	
 	
 	data->__drv_base = SPIx;
@@ -267,8 +266,10 @@ int		spi_ioctl	(struct platform_device *dev, int request, unsigned int arguments
 				}
 				else
 					SPIx->DR = 0;
-				if(xQueueReceive(g_spi_driver_arch_data.rx_event[dev->id], &u8val, portTICK_PERIOD_MS * 100) != pdTRUE)
-					break;
+				while(( SPIx->SR & 0x01) == 0 ){}
+				u8val = SPIx->DR;
+				//if(xQueueReceive(g_spi_driver_arch_data.rx_event[dev->id], &u8val, portTICK_PERIOD_MS * 100) != pdTRUE)
+				//	break;
 				if(rx){
 					*rx = u8val;
 					rx++;

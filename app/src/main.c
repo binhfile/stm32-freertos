@@ -15,7 +15,8 @@
 
 #include "network/mac/mac_mrf24j40.h"
 
-#include "Test.h"
+#include <Test.h>
+#include <Setup.h>
 
 void *Thread_Startup(void*);
 void *Thread_DebugTX(void*);
@@ -37,21 +38,6 @@ int                 g_fd_button         = -1;
 volatile uint8_t	g_debug_cmd = 0;
 
 struct mac_mrf24j40	g_rf_mac;
-
-/*************************************************************************/
-// AdditionalNodeID variable array defines the additional 
-// information to identify a device on a PAN. This array
-// will be transmitted when initiate the connection between 
-// the two devices. This  variable array will be stored in 
-// the Connection Entry structure of the partner device. The 
-// size of this array is ADDITIONAL_NODE_ID_SIZE, defined in 
-// ConfigApp.h.
-// In this demo, this variable array is set to be empty.
-/*************************************************************************/
-#if ADDITIONAL_NODE_ID_SIZE > 0
-    uint8_t AdditionalNodeID[ADDITIONAL_NODE_ID_SIZE] = {0x00};
-#endif
-
 
 extern int board_register_devices();
 int g_thread_index = 1;
@@ -112,58 +98,8 @@ void LREP(char* s, ...){
     mq_send(g_debug_tx_buffer, szBuffer, len, 0);
     sem_post(&g_sem_debug);
 }
-#define TEST_LEN (90)
 struct mac_mrf24j40_open_param	rf_mac_init;
-flag_event_t g_test_event;
-uint8_t g_rxBuffer[TEST_LEN];
 
-int Sys_ScanChannel(uint32_t channels, uint8_t * noise_level){
-	int timeout = 1000;
-	int ret = 0;
-	unsigned int i, j;
-	struct mac_channel_assessment ch_assessment;
-	struct timespec t_now, t_ref;
-	uint8_t u8val;
-
-	i = 0;
-	j = 20;
-	LREP("    MIN");
-	while(j > 0){
-		LREP("-");
-		j--;
-	}
-	LREP("MAX\r\n");
-	while(i < 32){
-		if( (((uint32_t)1) << i) & channels ){
-			LREP("ch: %02d ", i);
-			u8val = 0;
-			MAC_mrf24j40_ioctl(&g_rf_mac, mac_mrf24j40_ioc_set_channel, (unsigned int)&i);
-			clock_gettime(CLOCK_REALTIME, &t_ref);
-			while(1){
-				MAC_mrf24j40_ioctl(&g_rf_mac, mac_mrf24j40_ioc_channel_assessment, (unsigned int)&ch_assessment);
-				if(ch_assessment.noise_level > u8val) u8val = ch_assessment.noise_level;
-				clock_gettime(CLOCK_REALTIME, &t_now);
-				if(t_now.tv_sec < t_ref.tv_sec) break;
-				if((t_now.tv_sec*1000 + t_now.tv_nsec/1000000) - (t_ref.tv_sec*1000 + t_ref.tv_nsec/1000000) >= timeout){
-					break;
-				}else{
-					usleep_s(1000* 10);
-				}
-			}
-			*noise_level = u8val;
-			noise_level++;
-			j = u8val * 20 / 255;
-			while(j > 0){
-				LREP("-");
-				j--;
-			}
-			LREP(" %02X\r\n", u8val);
-		}
-		i++;
-	}
-
-	return ret;
-}
 void *Thread_Startup(void *pvParameters){
     int i, ret;
     struct termios2 opt;
@@ -222,7 +158,7 @@ void *Thread_Startup(void *pvParameters){
     else{
         uival = SPI_MODE_0;
         if(ioctl(rf_mac_init.fd_spi, SPI_IOC_WR_MODE, (unsigned int)&uival) != 0) LREP("ioctl spi mode failed\r\n");
-        uival = 5000000;
+        uival = 15000000;
         if(ioctl(rf_mac_init.fd_spi, SPI_IOC_WR_MAX_SPEED_HZ, (unsigned int)&uival) != 0) LREP("ioctl spi speed failed\r\n");
         else{
             uival = 0;
@@ -243,22 +179,32 @@ void *Thread_Startup(void *pvParameters){
         sem_post(&g_thread_startup[i]);
     }
     usleep_s(1000* 100);
-
-    LREP("1. MAC test\r\n");
-    LREP("2. Normal mode\r\n");
+MAIN_MENU:
+	LREP("------- Main menu ------\r\n");
+    LREP("1. Test\r\n");
+    LREP("2. Setup\r\n");
+    LREP("3. Normal mode\r\n");
     LREP("cmd? ");
     do{
     	userInput = kbhit(1000);
     }while(!userInput);
-    LREP("\r\n");
+    LREP("%c\r\n", userInput);
     switch(userInput){
     	case '1':{
-    		MAC_test();
+    		Test_menu();
+    		goto MAIN_MENU;
     		break;
     	}
     	case '2':{
+    		Setup_menu();
+    		goto MAIN_MENU;
     		break;
     	}
+    	case '3':{
+    		goto MAIN_MENU;
+    		break;
+    	}
+    	default: goto MAIN_MENU;
     }
     while(1){sleep(1);}
     return 0;
@@ -297,7 +243,7 @@ void *Thread_RFIntr(void *pvParameters){
             	MAC_mrf24j40_ioctl(&g_rf_mac, mac_mrf24j40_ioc_trigger_interrupt, 0);
             }
         }else if(len == 0){
-        	portYIELD();
+        	//portYIELD();
         }else{
             LREP("select intr pin failed.\r\n");
             break;
@@ -325,15 +271,7 @@ void *Thread_DebugRx(void *pvParameters){
             if(FD_ISSET(g_fd_debug, &readfs)){
                 len = read_dev(g_fd_debug, &u8val, 1);
                 if(len > 0){
-                    LREP("%c", u8val);
-                    switch(u8val){
-						case 's':
-							LREP("\r\nsend\r\n");
-							break;
-						case 'l':
-							LREP("\r\nloop\r\n");
-							break;
-                    }
+                    //LREP("%c", u8val);
                     g_debug_cmd = u8val;
                     if(u8val == 'r') reboot();
                 }

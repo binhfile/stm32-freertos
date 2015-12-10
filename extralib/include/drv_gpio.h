@@ -50,5 +50,5 @@ struct gpio_pin_ref {
 extern struct gpio_bank_ref g_gpio_bank_ref[];
 extern struct gpio_pin_ref  g_gpio_pin_ref[];
 
-#define GPIO_IOCTL_TOGGLE   0x01
+#define GPIO_IOC_TOGGLE   0x01
 #endif

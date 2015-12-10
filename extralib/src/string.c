@@ -55,18 +55,17 @@ void *	memset(void *s, int val, size_t count){
 	}
 	return s;
 }
-void *	memcpy_s(void* __dest, const void *__src, size_t count, size_t dest_size){
-	int i = 0;
-	const unsigned char*__restrict s = (const unsigned char*__restrict)__src;
-	unsigned char*__restrict d = (unsigned char*__restrict)__dest;
-
-	if(count > dest_size){
-		count = dest_size;
-	}
-	for(i = 0; i < count; i++){
-		d[i] = s[i];
-	}
-	return __dest;
-}
-
+//void *	memcpy_s(void* __dest, const void *__src, size_t count, size_t dest_size){
+//	int i = 0;
+//	const unsigned char*__restrict s = (const unsigned char*__restrict)__src;
+//	unsigned char*__restrict d = (unsigned char*__restrict)__dest;
+//
+//	if(count > dest_size){
+//		count = dest_size;
+//	}
+//	for(i = 0; i < count; i++){
+//		d[i] = s[i];
+//	}
+//	return __dest;
+//}
 //end of file

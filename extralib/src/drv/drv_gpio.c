@@ -11,6 +11,8 @@
 #include "semphr.h"
 #include "event_groups.h"
 
+#include <debug.h>
+
 int 	gpio_init		(void);
 int 	gpio_open		(struct platform_device *dev, int flags);
 int 	gpio_close		(struct platform_device *dev);
@@ -261,7 +263,7 @@ int		gpio_ioctl	(struct platform_device *dev, int request, unsigned int argument
 	int pin = gpio_get_pin_index(dev->id);
     
     switch(request){
-        case GPIO_IOCTL_TOGGLE:{
+        case GPIO_IOC_TOGGLE:{
             GPIO_ToggleBits(g_gpio_bank_ref[bank].GPIOx, g_gpio_pin_ref[pin].GPIO_Pin);
             ret = 0;
             break;
