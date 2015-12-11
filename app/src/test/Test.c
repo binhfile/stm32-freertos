@@ -11,7 +11,7 @@
 #include <drv_gpio.h>
 #include "network/mac/mac_mrf24j40.h"
 #include <Network.h>
-#include <Setup.h>
+#include <setting.h>
 #define TEST_LEN	(90)
 
 extern struct mac_mrf24j40	g_rf_mac;
