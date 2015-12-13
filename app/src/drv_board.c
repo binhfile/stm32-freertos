@@ -2,6 +2,28 @@
 #include <drv_usart.h>
 #include <drv_gpio.h>
 #include <spidev.h>
+/**
+ * A0 - Button
+ * A1 - RF
+ * A2
+ * A3
+ *
+ * B6 - UART
+ * B7
+ * B10- RF
+ *
+ * C2 - RF
+ * C3
+ *
+ * D12- LED green
+ * D13
+ * D14
+ * D15
+ *
+ *
+ *
+ *
+ */
 /*usart*/
 struct usart_platform_data g_usart_1_data = {
 	.tx_pin = gpio_get_pin('B', 6),// PB6
@@ -31,6 +53,13 @@ struct gpio_platform_data g_gpio_button_data = {
 	.intr 	= {
 		.mode 		= GPIO_INTR_MODE_INTERRUPT,
 		.trigger 	= GPIO_INTR_TRIGGER_FALLING,
+	},
+};
+struct gpio_platform_data g_gpio_input_data = {
+	.dir 	= GPIO_INPUT,
+	.pull 	= GPIO_NOPULL,
+	.intr 	= {
+		.mode 		= GPIO_INTR_MODE_DISABLE,
 	},
 };
 struct platform_device g_gpio_led_green_device = {
@@ -78,22 +107,13 @@ struct platform_device g_gpio_button_device = {
 	.id 		= gpio_get_pin('A', 0),	// A0
 	.next 		= 0,
 };
-struct platform_device g_gpio_spi2_cs_device = {
+struct platform_device g_gpio_spi1_cs_device = {
 	.dev_name 	= "spi-1-cs",
 	.name     	= "gpio-drv",
 	.dev 		= {
 		.platform_data = &g_gpio_mrf_output_data,
 	},
 	.id 		= gpio_get_pin('A', 1),
-	.next 		= 0,
-};
-struct platform_device g_gpio_spi4_cs_device = {
-	.dev_name 	= "spi-4-cs",
-	.name     	= "gpio-drv",
-	.dev 		= {
-		.platform_data = &g_gpio_mrf_output_data,
-	},
-	.id 		= gpio_get_pin('E', 4),
 	.next 		= 0,
 };
 struct platform_device g_gpio_rf_reset_device = {
@@ -115,36 +135,59 @@ struct platform_device g_gpio_rf_intr_device = {
 	.next 		= 0,
 };
 /*spi*/
-struct spi_platform_data g_spi_2_data = {
+struct spi_platform_data g_spi_1_data = {
 	.sck_pin 	= gpio_get_pin('B', 10),	// SPI_1
 	.ss_pin 	= GPIO_PIN_INVALID,
 	.mosi_pin 	= gpio_get_pin('C', 3),
 	.miso_pin 	= gpio_get_pin('C', 2),
 };
-struct spi_platform_data g_spi_4_data = {
-	.sck_pin 	= gpio_get_pin('E', 2),
-	.ss_pin 	= GPIO_PIN_INVALID,
-	.mosi_pin 	= gpio_get_pin('E', 6),
-	.miso_pin 	= gpio_get_pin('E', 5),
-};
-struct platform_device g_spi_2_device = {
+struct platform_device g_spi_1_device = {
 	.dev_name 	= "spi-1",
 	.name     	= "spidev-drv",
 	.id 	  	= 1,
 	.dev 		= {
-		.platform_data = &g_spi_2_data,
+		.platform_data = &g_spi_1_data,
 	},
 	.next 		= 0,
 };
-struct platform_device g_spi_4_device = {
-	.dev_name 	= "spi-3",
-	.name     	= "spidev-drv",
-	.id 	  	= 3,
+/*eeprom device*/
+struct platform_device g_gpio_at93c_cs_device = {
+	.dev_name 	= "at93c-cs",
+	.name     	= "gpio-drv",
 	.dev 		= {
-		.platform_data = &g_spi_4_data,
+		.platform_data = &g_gpio_output_data,
 	},
+	.id 		= gpio_get_pin('E', 6),
 	.next 		= 0,
 };
+struct platform_device g_gpio_at93c_sck_device = {
+	.dev_name 	= "at93c-sck",
+	.name     	= "gpio-drv",
+	.dev 		= {
+		.platform_data = &g_gpio_output_data,
+	},
+	.id 		= gpio_get_pin('E', 4),
+	.next 		= 0,
+};
+struct platform_device g_gpio_at93c_mosi_device = {
+	.dev_name 	= "at93c-mosi",
+	.name     	= "gpio-drv",
+	.dev 		= {
+		.platform_data = &g_gpio_output_data,
+	},
+	.id 		= gpio_get_pin('E', 2),
+	.next 		= 0,
+};
+struct platform_device g_gpio_at93c_miso_device = {
+	.dev_name 	= "at93c-miso",
+	.name     	= "gpio-drv",
+	.dev 		= {
+		.platform_data = &g_gpio_input_data,
+	},
+	.id 		= gpio_get_pin('E', 5),
+	.next 		= 0,
+};
+
 int board_register_devices(){
 	platform_device_register(&g_usart_1_device);
 	
@@ -153,13 +196,16 @@ int board_register_devices(){
 	platform_device_register(&g_gpio_led_orange_device);
 	platform_device_register(&g_gpio_led_blue_device);
 	platform_device_register(&g_gpio_button_device);
-	platform_device_register(&g_gpio_spi2_cs_device);
-	platform_device_register(&g_gpio_spi4_cs_device);
+	platform_device_register(&g_gpio_spi1_cs_device);
 	platform_device_register(&g_gpio_rf_reset_device);
 	platform_device_register(&g_gpio_rf_intr_device);
 	
-	platform_device_register(&g_spi_2_device);
-	platform_device_register(&g_spi_4_device);
+	platform_device_register(&g_gpio_at93c_cs_device);
+	platform_device_register(&g_gpio_at93c_sck_device);
+	platform_device_register(&g_gpio_at93c_mosi_device);
+	platform_device_register(&g_gpio_at93c_miso_device);
+
+	platform_device_register(&g_spi_1_device);
 	return 0;
 }
 //end of file

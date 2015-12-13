@@ -11,15 +11,10 @@
 #ifdef	__cplusplus
 extern "C" {
 #endif
-int     strncmp_s(const char *s1, const char *s2, size_t count);
-char *	strncpy_s(char *dest, const char *src, size_t count);
-size_t  strlen_s(const char *s);
+int     strncmp(const char *s1, const char *s2, size_t count);
+char *	strncpy(char *dest, const char *src, size_t count);
+size_t  strlen(const char *s);
 void *	memset(void *s, int val, size_t count);
-//void *	memcpy_s(void *dest, const void* src, size_t count, size_t dest_size);
-
-extern void  Mem_Copy (void *pdest, void *psrc, unsigned int   size);
-
-#define memcpy_s(d, s, s_c) Mem_Copy(d, s, s_c)
 #ifdef	__cplusplus
 }
 #endif

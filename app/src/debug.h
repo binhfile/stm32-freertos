@@ -21,7 +21,7 @@ extern int g_fd_led[];
 
 extern uint8_t kbhit(int timeout);
 extern uint8_t kb_value();
-
+extern uint8_t kb_cmd(const char* cmd);
 #include "FreeRTOS.h"
 #include "task.h"
 extern volatile TickType_t t_profile_ref, t_profile_now;

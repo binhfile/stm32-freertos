@@ -61,7 +61,7 @@ int driver_probe(){
     }
     return 0;
 }
-int open_dev(const char *pathname, int flags){
+int open(const char *pathname, int flags){
 	int ret = -EPERM;
 	struct platform_driver *drv = g_list_drivers;
 	struct platform_device *pdev = 0;
@@ -156,7 +156,7 @@ int 	write	(int fd, const void *buf, size_t count){
 		ret = drv->write(pdev, buf, count);
 	return ret;
 }
-int 	read_dev	(int fd, void *buf, size_t count){
+int 	read	(int fd, void *buf, size_t count){
 	int ret = -EPERM;
 	struct platform_driver *drv = g_list_drivers;
 	struct platform_device *pdev = 0;

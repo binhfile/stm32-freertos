@@ -249,7 +249,10 @@ int		spi_ioctl	(struct platform_device *dev, int request, unsigned int arguments
 	data = (struct spi_platform_data*)dev->dev.platform_data;
 	SPIx = (SPI_TypeDef*)data->__drv_base;
 	
-	if(dev->id < 0 || dev->id > SPI_MODULE_COUNT) return ret;
+	if(dev->id < 0 || dev->id > SPI_MODULE_COUNT) {
+		LREP("invalid dev id %d max %d\r\n", dev->id, SPI_MODULE_COUNT);
+		return ret;
+	}
 	
 	switch(request){
 		case SPI_IOC_MESSAGE(1):{

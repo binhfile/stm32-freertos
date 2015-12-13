@@ -12,23 +12,22 @@
 #include "network/mac/mac_mrf24j40.h"
 #include <Network.h>
 #include <setting.h>
+#include <string.h>
 #define TEST_LEN	(90)
 
 extern struct mac_mrf24j40	g_rf_mac;
+extern struct setting_device	g_setting_dev;
 
 void MAC_test_loop_received_packets();
 void MAC_test_send_and_check_packets();
-
+void Setting_test();
 void Test_menu(){
 	uint8_t userInput;
 	LREP("------- TEST ------\r\n");
 	LREP("1. MAC\r\n");
 	LREP("2. Network\r\n");
-	LREP("cmd? ");
-	do{
-		userInput = kbhit(1000);
-	}while(!userInput);
-	LREP("%c\r\n", userInput);
+	LREP("3. Setting device\r\n");
+	userInput = kb_cmd("cmd");
 	switch(userInput){
 		case '1':{
 			MAC_test();
@@ -36,6 +35,10 @@ void Test_menu(){
 		}
 		case '2':{
 			Network_test();
+			break;
+		}
+		case '3':{
+			Setting_test();
 			break;
 		}
 		default: break;
@@ -46,12 +49,7 @@ void MAC_test(){
 	LREP("------- MAC test ------\r\n");
 	LREP("1. Loop received packets\r\n");
 	LREP("2. Send and check received packets\r\n");
-	LREP("cmd? ");
-	do{
-		userInput = kbhit(1000);
-	}while(!userInput);
-	LREP("%c\r\n", userInput);
-
+	userInput = kb_cmd("cmd");
 	switch(userInput){
 		case '1':{
 			MAC_test_loop_received_packets();
@@ -67,7 +65,10 @@ void MAC_test(){
 void MAC_test_loop_received_packets(){
 	uint8_t rxBuf[TEST_LEN];
 	int i, len, payload_cnt = 0, packet_done_cnt = 0;
+	unsigned int uival;
 	struct mac_mrf24j40_write_param write_param;
+	struct mac_mrf24j40_read_param read_param;
+	struct setting_value setting;
 
 	write_param.flags.bits.packetType 	= MAC_MRF24J40_PACKET_TYPE_DATA;
 	write_param.flags.bits.broadcast	= 1;
@@ -78,9 +79,17 @@ void MAC_test_loop_received_packets(){
 	write_param.flags.bits.secEn		= 0;
 	write_param.destPANId 				= 0xffff;
 	write_param.destAddress 			= 0xffff;
+
+	setting_read(&g_setting_dev, &setting);
+	uival = 25;
+	MAC_mrf24j40_ioctl(&g_rf_mac, mac_mrf24j40_ioc_set_channel, (unsigned int)&uival);
+	for(i = 0; i < 8 ; i++)
+		rxBuf[i] = setting.mac_long_address[i];
+	MAC_mrf24j40_ioctl(&g_rf_mac, mac_mrf24j40_ioc_set_long_address, (unsigned int)rxBuf);
+
 	LREP("Begin loop packets\r\n");
 	while(kb_value() != 's'){
-		len = MAC_mrf24j40_read(&g_rf_mac, rxBuf, TEST_LEN, 1000);
+		len = MAC_mrf24j40_read(&g_rf_mac, &read_param, rxBuf, TEST_LEN, 1000);
 		if(len <= 0){
 		}else{
 			for(i = 0; i < TEST_LEN; i++){
@@ -94,9 +103,13 @@ void MAC_test_loop_received_packets(){
 void MAC_test_send_and_check_packets(){
 	uint8_t txBuf[TEST_LEN], rxBuf[TEST_LEN];
 	uint8_t cnt = 0;
+	uint8_t* pu8;
+	unsigned int uival;
 	int i, len, t_diff, payload_cnt = 0, packet_done_cnt = 0, packet_err_cnt = 0, packet_timeout_cnt = 0;
 	struct mac_mrf24j40_write_param write_param;
+	struct mac_mrf24j40_read_param read_param;
 	struct timespec t_ref, t_now;
+	struct setting_value setting;
 
 	write_param.flags.bits.packetType 	= MAC_MRF24J40_PACKET_TYPE_DATA;
 	write_param.flags.bits.broadcast	= 1;
@@ -105,8 +118,15 @@ void MAC_test_send_and_check_packets(){
 	write_param.flags.bits.sourcePrsnt	= 0;
 	write_param.flags.bits.repeat		= 0;
 	write_param.flags.bits.secEn		= 0;
-	write_param.destPANId 				= 0xffff;
-	write_param.destAddress 			= 0xffff;
+	write_param.destPANId 				= 0xFFFF;
+	write_param.destAddress 			= 0xFFFFFFFFFFFFFFFF;
+
+	setting_read(&g_setting_dev, &setting);
+	uival = 25;
+	MAC_mrf24j40_ioctl(&g_rf_mac, mac_mrf24j40_ioc_set_channel, (unsigned int)&uival);
+	for(i = 0; i < 8 ; i++)
+		rxBuf[i] = setting.mac_long_address[i];
+	MAC_mrf24j40_ioctl(&g_rf_mac, mac_mrf24j40_ioc_set_long_address, (unsigned int)rxBuf);
 
 	LREP("Begin send packets\r\n");
 	clock_gettime(CLOCK_REALTIME, &t_ref);
@@ -115,7 +135,7 @@ void MAC_test_send_and_check_packets(){
 			txBuf[i] = cnt++;
 		}
 		MAC_mrf24j40_write(&g_rf_mac, &write_param, txBuf, TEST_LEN);
-		len = MAC_mrf24j40_read(&g_rf_mac, rxBuf, TEST_LEN, 1000);
+		len = MAC_mrf24j40_read(&g_rf_mac, &read_param, rxBuf, TEST_LEN, 1000);
 		if(len <= 0){
 			LREP("timeout\r\n");
 			packet_timeout_cnt++;
@@ -149,6 +169,13 @@ void MAC_test_send_and_check_packets(){
 	if(t_diff > 0)
 	LREP("Speed:              %d.%d KB/s\r\n", payload_cnt / t_diff * 1000 / 1024,
 			(payload_cnt / t_diff * 1000 - (payload_cnt / t_diff * 1000 / 1024)*1024)*10/1024);
+	LREP("Partner: ");
+	pu8 = (uint8_t*)&read_param.srcAddr;
+	for(i = 0; i < 7; i++) LREP("%02X:", pu8[i]);
+	LREP("%02X", pu8[i]);
+	LREP("@%02X%02X\r\n",
+			((uint8_t)((read_param.srcPANid & 0xFF00) >> 8)),
+			((uint8_t)(read_param.srcPANid & 0x00FF)));
 }
 void Network_test(){
 	uint8_t userInput;
@@ -156,12 +183,7 @@ void Network_test(){
 
 	LREP("------- Network test ------\r\n");
 	LREP("1. Scan noise channel\r\n");
-	LREP("cmd? ");
-	do{
-		userInput = kbhit(1000);
-	}while(!userInput);
-	LREP("%c\r\n", userInput);
-
+	userInput = kb_cmd("cmd");
 	switch(userInput){
 		case '1':{
 			Network_scan_channel(&g_rf_mac, 0x03fff800, noise_level);
@@ -172,5 +194,47 @@ void Network_test(){
 		}
 		default: break;
 	}
+}
+void Setting__test_erase_and_write(){
+	uint8_t buf[AT93C66_SIZE], wBuf[AT93C66_SIZE];
+	int len, i;
+	LREP("Erase eeprom ...");
+	at93c_ioctl(&g_setting_dev.dev, at93c_ioc_erase_all, 0);
+	at93c_read(&g_setting_dev.dev, 0, buf, AT93C66_SIZE);
+	for(i = 0; i < AT93C66_SIZE; i++){
+		if(buf[i] != 0xFF) break;
+	}
+	if(i == AT93C66_SIZE) LREP("DONE\r\n");
+	else LREP("FALSE\r\n");
+
+	for(i = 0; i < AT93C66_SIZE; i++){
+		wBuf[i] = i;
+		buf[i] = 0;
+	}
+	LREP("Write pattern and verify ...");
+	at93c_write(&g_setting_dev.dev, 0, wBuf, AT93C66_SIZE);
+	at93c_read(&g_setting_dev.dev, 0, buf, AT93C66_SIZE);
+	for(i = 0; i < AT93C66_SIZE; i++){
+		if(buf[i] != wBuf[i]) break;
+	}
+	if(i == AT93C66_SIZE) LREP("DONE\r\n");
+	else LREP("FALSE\r\n");
+
+}
+void Setting_test(){
+	uint8_t input;
+	do{
+		LREP("--------- Setting test ----------\r\n");
+		LREP("1. Erase all and test write\r\n");
+		LREP("q. Return\r\n");
+		input = kb_cmd("cmd");
+		switch(input){
+			case 'q': break;
+			case '1':{
+				Setting__test_erase_and_write();
+				break;
+			}
+		}
+	}while(input != 'q');
 }
 // end of file

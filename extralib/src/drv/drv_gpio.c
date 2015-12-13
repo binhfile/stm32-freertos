@@ -239,6 +239,8 @@ int		gpio_read	(struct platform_device *dev, void* buf, int count){
 	if(count > 0){
 		*p = GPIO_ReadInputDataBit(g_gpio_bank_ref[bank].GPIOx, (((uint16_t)0x01)<< pin));
 		ret = 1;
+	}else{
+//		LREP("gpio: read count = %d\r\n", count);
 	}
 	return ret;
 }

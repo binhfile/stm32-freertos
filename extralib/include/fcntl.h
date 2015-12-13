@@ -13,9 +13,9 @@ struct timeval {
 #define O_WRONLY	0x0001
 #define O_RDWR		0x0002
 
-int 	open_dev(const char *pathname, int flags);
+int 	open(const char *pathname, int flags);
 int 	close	(int fd);
-int		read_dev(int fd, void *buf, size_t count);
+int		read(int fd, void *buf, size_t count);
 int		write	(int fd, const void *buf, size_t count);
 int 	ioctl	(int d, int request, unsigned int arguments);
 /*On  success,  select()  and pselect() return the number of 

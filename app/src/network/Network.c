@@ -37,7 +37,7 @@ int Network_scan_channel(struct mac_mrf24j40 *mac, uint32_t channels, uint8_t * 
 				if((t_now.tv_sec*1000 + t_now.tv_nsec/1000000) - (t_ref.tv_sec*1000 + t_ref.tv_nsec/1000000) >= timeout){
 					break;
 				}else{
-					usleep_s(1000* 10);
+					usleep(1000* 10);
 				}
 			}
 			*noise_level = u8val;

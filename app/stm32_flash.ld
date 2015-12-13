@@ -164,7 +164,6 @@ SECTIONS
   /* Remove information from the standard libraries */
   /DISCARD/ :
   {
-    libc.a ( * )
     libm.a ( * )
     libgcc.a ( * )
   }

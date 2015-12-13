@@ -2,6 +2,7 @@
 #include <spidev.h>
 #include <drv_api.h>
 #include <string.h>
+#include <unistd.h>
 int at25_init(struct at25_device* dev){
 	dev->fd_spi = 0;
 	dev->fd_cs  = 0;
@@ -104,12 +105,13 @@ int at25_ioctl(struct at25_device* dev, int request, unsigned int args){
 	}
 	return ret;
 }
-int at25_write(struct at25_device* dev, const void* payload, int length){
+#include <debug.h>
+int at25_write(struct at25_device* dev, unsigned int address, const void* payload, int length){
 	int ret = 0, i;
 	uint8_t u8val;
 	struct 	spi_ioc_transfer tr;
 	struct at25_reg_status reg_status;
-	uint8_t txBuf[at25_page_size+1];
+	uint8_t txBuf[at25_page_size+3];
 	uint8_t *pu8;
 	uint8_t timeout;
 
@@ -117,17 +119,20 @@ int at25_write(struct at25_device* dev, const void* payload, int length){
 	if(length > at25_page_size) length = at25_page_size;
 	tr.tx_buf = (unsigned int)txBuf;
 	tr.rx_buf = 0;
-	tr.len = length + 1;
+	tr.len = length + 3;
 	txBuf[0] = at25_ins_write;
+	txBuf[1] = ((address & 0xFF00) >> 8);
+	txBuf[2] = (address & 0x00FF);
 	pu8 = (uint8_t*)payload;
 	for(i = 0; i < length; i++){
-		txBuf[i+1] = pu8[i];
+		txBuf[i+3] = pu8[i];
 	}
 	timeout = 100;
 	// enable write
-	at25_enable_write(dev);
+	ret = at25_enable_write(dev); 
+	usleep(1000* 100);
 	// read status
-	at25_read_status(dev, &reg_status);
+	ret = at25_read_status(dev, &reg_status);
 	if(reg_status.status.bits.wen){
 		// cs = 0
 		u8val = 0;
@@ -146,45 +151,52 @@ int at25_write(struct at25_device* dev, const void* payload, int length){
 			ret = length;
 	}else{
 		ret = -1;
+		LREP("status = %02X\r\n", reg_status.status.Val);
 	}
 	return ret;
 }
-int at25_read(struct at25_device* dev, const void* payload, int max_length){
+int at25_read(struct at25_device* dev, unsigned int address, const void* payload, int max_length){
 	int ret = 0, i;
 	uint8_t u8val;
 	struct 	spi_ioc_transfer tr;
 	struct at25_reg_status reg_status;
-	uint8_t txBuf[1];
+	uint8_t txBuf[32+3], rxBuf[32+3];
 	uint8_t timeout;
 
 	if(max_length <= 0) return 0;
 	timeout = 100;
 	
 	// read status
-	at25_read_status(dev, &reg_status);
-	if(reg_status.status.bits.rdy == 0){
+	//at25_read_status(dev, &reg_status);
+	//if(reg_status.status.bits.rdy == 0)
+	{
 		// cs = 0
 		u8val = 0;
 		write(dev->fd_cs, &u8val, 1);
 
 		tr.tx_buf = (unsigned int)txBuf;
 		tr.rx_buf = 0;
-		tr.len    = 1;	
+		tr.len    = max_length+3;	
 		txBuf[0] = at25_ins_read;
-		ioctl(dev->fd_spi, SPI_IOC_MESSAGE(1), (unsigned int)&tr);
+		txBuf[1] = (address & 0xFF00) >> 8;
+		txBuf[2] = (address & 0x00FF);
+//		ioctl(dev->fd_spi, SPI_IOC_MESSAGE(1), (unsigned int)&tr);
 		
-		tr.tx_buf = 0;
-		tr.rx_buf = (unsigned int)payload;
-		tr.len    = max_length;	
-		ioctl(dev->fd_spi, SPI_IOC_MESSAGE(1), (unsigned int)&tr);		
-		
+//		tr.tx_buf = 0;
+		tr.rx_buf = (unsigned int)rxBuf;
+//		tr.len    = max_length;	
+		ret = ioctl(dev->fd_spi, SPI_IOC_MESSAGE(1), (unsigned int)&tr);		
+		memcpy(payload, &rxBuf[3], max_length);
 		// cs = 1
 		u8val = 1;
 		write(dev->fd_cs, &u8val, 1);
-		ret = max_length;
-	}else{
-		ret = -1;
+		if(ret > 0)
+			ret = max_length;
+		else ret = 0;
 	}
+	//else{
+	//	ret = -1;
+	//}
 	return ret;
 
 }

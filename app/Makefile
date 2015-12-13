@@ -48,10 +48,10 @@ MCFLAGS=-mcpu=cortex-m4 -mthumb -mlittle-endian \
 -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb-interwork
 # COMPILE FLAGS
 DEFS=-DUSE_STDPERIPH_DRIVER -DSTM32F4XX
-CFLAGS  =-c $(MCFLAGS) $(DEFS) $(INCLUDES)
+CFLAGS  =-c $(MCFLAGS) $(DEFS) $(INCLUDES) -nostdlib
 # LINKER FLAGS
 LDSCRIPT= stm32_flash.ld
-LDFLAGS =-T $(LDSCRIPT) --specs=nosys.specs $(MCFLAGS) -Wl,-Map=bin/app.map
+LDFLAGS =-nostdlib -T $(LDSCRIPT) --specs=nosys.specs $(MCFLAGS) -Wl,-Map=bin/app.map
 
 ###
 # Optimizations

@@ -118,10 +118,10 @@ void PHY_mrf24j40_hardreset(struct phy_mrf24j40* phy){
 	uint8_t u8val = 0;
 
 	write(phy->fd_reset, &u8val, 1);
-	usleep_s(1000 * 100);
+	usleep(1000 * 100);
 	u8val = 1;
 	write(phy->fd_reset, &u8val, 1);
-	usleep_s(1000 * 100);
+	usleep(1000 * 100);
 }
 void PHY_mrf24j40_softreset(struct phy_mrf24j40* phy){
 	uint8_t i;
@@ -130,10 +130,10 @@ void PHY_mrf24j40_softreset(struct phy_mrf24j40* phy){
     do
     {
         i = PHY_mrf24j40_getShortRAMAddr(phy, PHY_MRF24J40_READ_SOFTRST);
-        usleep_s(1000 * 10);
+        usleep(1000 * 10);
         timeout-=10;
     } while (((i & 0x07) != (uint8_t) 0x00) && (timeout > 0));
-    usleep_s(1000 * 100);
+    usleep(1000 * 100);
     if(timeout == 0) LREP_WARN("timeout\r\n");
 }
 int PHY_mrf24j40_setChannel(struct phy_mrf24j40* phy, uint8_t channel)
@@ -155,6 +155,26 @@ int PHY_mrf24j40_setChannel(struct phy_mrf24j40* phy, uint8_t channel)
     PHY_mrf24j40_setShortRAMAddr(phy, PHY_MRF24J40_WRITE_RFCTL, 0x00);
     return 0;
 }
+void PHY_mrf24j40_set_short_address(struct phy_mrf24j40* phy, uint8_t *address){
+	phy->s_address[0] = address[0];
+	phy->s_address[1] = address[1];
+	PHY_mrf24j40_setShortRAMAddr(phy, PHY_MRF24J40_WRITE_SADRL, phy->s_address[0]);
+	PHY_mrf24j40_setShortRAMAddr(phy, PHY_MRF24J40_WRITE_SADRH, phy->s_address[1]);
+}
+void PHY_mrf24j40_set_long_address(struct phy_mrf24j40* phy, uint8_t *address){
+	int i;
+	for (i = 0; i < (uint8_t) 8; i++)
+	{
+		phy->l_address[i] = address[i];
+		PHY_mrf24j40_setShortRAMAddr(phy, PHY_MRF24J40_WRITE_EADR0 + i * 2, phy->l_address[i]);
+	}
+}
+void PHY_mrf24j40_set_pan_id(struct phy_mrf24j40* phy, uint8_t *panid){
+	phy->pan_id[0] = panid[0];
+	phy->pan_id[1] = panid[1];
+	PHY_mrf24j40_setShortRAMAddr(phy, PHY_MRF24J40_WRITE_PANIDL, phy->pan_id[0]);
+	PHY_mrf24j40_setShortRAMAddr(phy, PHY_MRF24J40_WRITE_PANIDH, phy->pan_id[1]);
+}
 void PHY_mrf24j40_initialize(struct phy_mrf24j40* phy){
 	uint8_t i;
 	uint8_t timeout = 100;
@@ -165,10 +185,10 @@ void PHY_mrf24j40_initialize(struct phy_mrf24j40* phy){
 	PHY_mrf24j40_setShortRAMAddr(phy, PHY_MRF24J40_WRITE_RXFLUSH, 0x01);
 
 	/* Program the short MAC Address, 0xffff */
-	PHY_mrf24j40_setShortRAMAddr(phy, PHY_MRF24J40_WRITE_SADRL, 0xFF);
-	PHY_mrf24j40_setShortRAMAddr(phy, PHY_MRF24J40_WRITE_SADRH, 0xFF);
-	PHY_mrf24j40_setShortRAMAddr(phy, PHY_MRF24J40_WRITE_PANIDL, 0xFF);
-	PHY_mrf24j40_setShortRAMAddr(phy, PHY_MRF24J40_WRITE_PANIDH, 0xFF);
+	PHY_mrf24j40_setShortRAMAddr(phy, PHY_MRF24J40_WRITE_SADRL, phy->s_address[0]);
+	PHY_mrf24j40_setShortRAMAddr(phy, PHY_MRF24J40_WRITE_SADRH, phy->s_address[1]);
+	PHY_mrf24j40_setShortRAMAddr(phy, PHY_MRF24J40_WRITE_PANIDL, phy->pan_id[0]);
+	PHY_mrf24j40_setShortRAMAddr(phy, PHY_MRF24J40_WRITE_PANIDH, phy->pan_id[1]);
 
 	/* Program Long MAC Address*/
 	for (i = 0; i < (uint8_t) 8; i++)
@@ -235,7 +255,7 @@ void PHY_mrf24j40_initialize(struct phy_mrf24j40* phy){
 	do
 	{
 		i = PHY_mrf24j40_getLongRAMAddr(phy, PHY_MRF24J40_RFSTATE);
-		usleep_s(1000);
+		usleep(1000);
 		timeout--;
 	}
 	while (((i&0xA0) != 0xA0) && (timeout > 0));
@@ -280,6 +300,10 @@ int 	MAC_mrf24j40_open(struct mac_mrf24j40* mac, struct mac_mrf24j40_open_param 
 	mac->phy.l_address[5] = 0;
 	mac->phy.l_address[6] = 0;
 	mac->phy.l_address[7] = 0;
+	mac->phy.s_address[0] = 0xff;
+	mac->phy.s_address[1] = 0xff;
+	mac->phy.pan_id[0] 	  = 0xff;
+	mac->phy.pan_id[1] 	  = 0xff;
 	mac->phy.channel	  = 25;
 	mac->phy.turboEn 	  = 0;
 
@@ -303,10 +327,11 @@ int 	MAC_mrf24j40_open(struct mac_mrf24j40* mac, struct mac_mrf24j40_open_param 
 
 	return ret;
 }
-int 	MAC_mrf24j40_read(struct mac_mrf24j40* mac, void* payload, int payload_maxlen, int timeout){
-	int ret = 0, i;
+int 	MAC_mrf24j40_read(struct mac_mrf24j40* mac, struct mac_mrf24j40_read_param * param, void* payload, int payload_maxlen, int timeout){
+	int ret = 0, i, hdr_len, payload_len;
 	struct mac_mrf24j40_read_item* item = 0;
 	struct timespec abs_timeout;
+	struct mac_ieee802154_frm_ctrl *frmCtrl;
 
 	__mac_mrf24j40_lock(mac);
 	for(i = 0; i < MAC_MRF24J40_READ_MAX_ITEMS; i++){
@@ -316,9 +341,51 @@ int 	MAC_mrf24j40_read(struct mac_mrf24j40* mac, void* payload, int payload_maxl
 		}
 	}
 	if(item){
-		if(item->payload_len > payload_maxlen) item->payload_len = payload_maxlen;
-		memcpy_s(payload, item->payload, item->payload_len);
-		ret = item->payload_len;
+		frmCtrl = (struct mac_ieee802154_frm_ctrl *)&item->payload[1];	// offset hdr_len
+		hdr_len = 1+2+1+2; // frame_len(1)+frameCtrl(2)+seq(1)+PANId(2)
+		if(frmCtrl->bits.destAddrMode == mac_iee802154_addrmode_16bit){
+			param->destAddr = ((uint16_t)item->payload[hdr_len] & 0x00FF) | (((uint16_t)item->payload[hdr_len+1] << 8) & 0xFF00);
+			hdr_len+=2;
+		}
+		else {
+			param->destAddr =
+					(((uint64_t)item->payload[hdr_len] << 0) & (((uint64_t)0x00FF) << 0)) |
+					(((uint64_t)item->payload[hdr_len+1] << 8*1) & (((uint64_t)0x00FF) << 8)) |
+					(((uint64_t)item->payload[hdr_len+2] << 8*2) & (((uint64_t)0x00FF) << 8*2)) |
+					(((uint64_t)item->payload[hdr_len+3] << 8*3) & (((uint64_t)0x00FF) << 8*3)) |
+
+					(((uint64_t)item->payload[hdr_len+4] << 8*4) & (((uint64_t)0x00FF) << 8*4)) |
+					(((uint64_t)item->payload[hdr_len+5] << 8*5) & (((uint64_t)0x00FF) << 8*5)) |
+					(((uint64_t)item->payload[hdr_len+6] << 8*6) & (((uint64_t)0x00FF) << 8*6)) |
+					(((uint64_t)item->payload[hdr_len+7] << 8*7) & (((uint64_t)0x00FF) << 8*7));
+			hdr_len+=8;
+		}
+		if(frmCtrl->bits.srcAddrMode == mac_iee802154_addrmode_16bit){
+			param->srcAddr = ((uint16_t)item->payload[hdr_len] & 0x00FF) | (((uint16_t)item->payload[hdr_len+1] << 8) & 0xFF00);
+			hdr_len+=2;
+		}
+		else {
+			param->srcAddr =
+					(((uint64_t)item->payload[hdr_len]) & (((uint64_t)0x00FF))) |
+					(((uint64_t)item->payload[hdr_len+1] << 8*1) & (((uint64_t)0x00FF) << 8)) |
+					(((uint64_t)item->payload[hdr_len+2] << 8*2) & (((uint64_t)0x00FF) << 8*2)) |
+					(((uint64_t)item->payload[hdr_len+3] << 8*3) & (((uint64_t)0x00FF) << 8*3)) |
+
+					(((uint64_t)item->payload[hdr_len+4] << 8*4) & (((uint64_t)0x00FF) << 8*4)) |
+					(((uint64_t)item->payload[hdr_len+5] << 8*5) & (((uint64_t)0x00FF) << 8*5)) |
+					(((uint64_t)item->payload[hdr_len+6] << 8*6) & (((uint64_t)0x00FF) << 8*6)) |
+					(((uint64_t)item->payload[hdr_len+7] << 8*7) & (((uint64_t)0x00FF) << 8*7));
+			hdr_len+=8;
+		}
+
+		payload_len = item->payload_len - hdr_len;
+		if(payload_len > payload_maxlen) payload_len = payload_maxlen;
+		memcpy(payload, &item->payload[hdr_len], payload_len);
+		param->frame_len = item->payload[0];
+		param->frame_ctrl.bits.Val = frmCtrl->bits.Val;
+		param->seq = item->payload[3];
+		param->srcPANid = ((uint16_t)item->payload[4] & 0x00FF) | (((uint16_t)item->payload[5] << 8) & 0xFF00);
+		ret = payload_len;
 		item->flags &= ~((uint8_t)0x01);
 	}
 	__mac_mrf24j40_unlock(mac);
@@ -336,9 +403,51 @@ int 	MAC_mrf24j40_read(struct mac_mrf24j40* mac, void* payload, int payload_maxl
 			}
 		}
 		if(item){
-			if(item->payload_len > payload_maxlen) item->payload_len = payload_maxlen;
-			memcpy_s(payload, item->payload, item->payload_len);
-			ret = item->payload_len;
+			frmCtrl = (struct mac_ieee802154_frm_ctrl *)&item->payload[1];	// offset hdr_len
+			hdr_len = 1+2+1+2; // frame_len(1)+frameCtrl(2)+seq(1)+PANId(2)
+			if(frmCtrl->bits.destAddrMode == mac_iee802154_addrmode_16bit){
+				param->destAddr = ((uint16_t)item->payload[hdr_len] & 0x00FF) | (((uint16_t)item->payload[hdr_len+1] << 8) & 0xFF00);
+				hdr_len+=2;
+			}
+			else {
+				param->destAddr =
+						(((uint64_t)item->payload[hdr_len] << 0) & (((uint64_t)0x00FF) << 0)) |
+						(((uint64_t)item->payload[hdr_len+1] << 8*1) & (((uint64_t)0x00FF) << 8)) |
+						(((uint64_t)item->payload[hdr_len+2] << 8*2) & (((uint64_t)0x00FF) << 8*2)) |
+						(((uint64_t)item->payload[hdr_len+3] << 8*3) & (((uint64_t)0x00FF) << 8*3)) |
+
+						(((uint64_t)item->payload[hdr_len+4] << 8*4) & (((uint64_t)0x00FF) << 8*4)) |
+						(((uint64_t)item->payload[hdr_len+5] << 8*5) & (((uint64_t)0x00FF) << 8*5)) |
+						(((uint64_t)item->payload[hdr_len+6] << 8*6) & (((uint64_t)0x00FF) << 8*6)) |
+						(((uint64_t)item->payload[hdr_len+7] << 8*7) & (((uint64_t)0x00FF) << 8*7));
+				hdr_len+=8;
+			}
+			if(frmCtrl->bits.srcAddrMode == mac_iee802154_addrmode_16bit){
+				param->srcAddr = ((uint16_t)item->payload[hdr_len] & 0x00FF) | (((uint16_t)item->payload[hdr_len+1] << 8) & 0xFF00);
+				hdr_len+=2;
+			}
+			else {
+				param->srcAddr =
+						(((uint64_t)item->payload[hdr_len]) & (((uint64_t)0x00FF))) |
+						(((uint64_t)item->payload[hdr_len+1] << 8*1) & (((uint64_t)0x00FF) << 8)) |
+						(((uint64_t)item->payload[hdr_len+2] << 8*2) & (((uint64_t)0x00FF) << 8*2)) |
+						(((uint64_t)item->payload[hdr_len+3] << 8*3) & (((uint64_t)0x00FF) << 8*3)) |
+
+						(((uint64_t)item->payload[hdr_len+4] << 8*4) & (((uint64_t)0x00FF) << 8*4)) |
+						(((uint64_t)item->payload[hdr_len+5] << 8*5) & (((uint64_t)0x00FF) << 8*5)) |
+						(((uint64_t)item->payload[hdr_len+6] << 8*6) & (((uint64_t)0x00FF) << 8*6)) |
+						(((uint64_t)item->payload[hdr_len+7] << 8*7) & (((uint64_t)0x00FF) << 8*7));
+				hdr_len+=8;
+			}
+
+			payload_len = item->payload_len - hdr_len;
+			if(payload_len > payload_maxlen) payload_len = payload_maxlen;
+			memcpy(payload, &item->payload[hdr_len], payload_len);
+			param->frame_len = item->payload[0];
+			param->frame_ctrl.bits.Val = frmCtrl->bits.Val;
+			param->seq = item->payload[3];
+			param->srcPANid = ((uint16_t)item->payload[4] & 0x00FF) | (((uint16_t)item->payload[5] << 8) & 0xFF00);
+			ret = payload_len;
 			item->flags &= ~((uint8_t)0x01);
 		}
 		__mac_mrf24j40_unlock(mac);
@@ -359,8 +468,8 @@ int 	MAC_mrf24j40_write(struct mac_mrf24j40* mac, struct mac_mrf24j40_write_para
 	}
 	if(item){
 		if(payloadlen > MAC_MRF24J40_WRITE_PAYLOAD_MAX_LENGTH) payloadlen = MAC_MRF24J40_WRITE_PAYLOAD_MAX_LENGTH;
-		memcpy_s(&item->param, trans, sizeof(struct mac_mrf24j40_write_param));
-		memcpy_s(item->payload, payload, payloadlen);
+		memcpy(&item->param, trans, sizeof(struct mac_mrf24j40_write_param));
+		memcpy(item->payload, payload, payloadlen);
 		item->payload_len = payloadlen;
 		item->flags |= 0x01;
 	}else{
@@ -393,17 +502,20 @@ int 	__mac_mrf24j40_write(struct mac_mrf24j40* mac, struct mac_mrf24j40_write_pa
 	else if(trans->flags.bits.packetType == MAC_MRF24J40_PACKET_TYPE_CMD)
 		frmCtrl.bits.frmType = mac_iee802154_frmtype_cmd;
 	// inner PAN
-	hdr_len = 5;
+	hdr_len = 2+1+2;// frmCrl(2)+seq(1)+destPANId(2)
 	frmCtrl.bits.intraPAN = 1;
 	//altDestAddr = 1
-	hdr_len += 2;
 	//altSrcAddr = 1
-	hdr_len += 2;
 	// ACK req
 	if(trans->flags.bits.ackReq && (trans->flags.bits.broadcast == 0))
 		frmCtrl.bits.ackReq = 1;
 	frmCtrl.bits.destAddrMode = mac_iee802154_addrmode_16bit;
-	frmCtrl.bits.srcAddrMode = mac_iee802154_addrmode_16bit;
+	frmCtrl.bits.srcAddrMode = mac_iee802154_addrmode_64bit;
+
+	if(frmCtrl.bits.destAddrMode == mac_iee802154_addrmode_16bit) hdr_len+=2;
+	else hdr_len +=8;
+	if(frmCtrl.bits.srcAddrMode == mac_iee802154_addrmode_16bit) hdr_len+=2;
+	else hdr_len +=8;
 
 	ram_addr = 0;
 	PHY_mrf24j40_setLongRAMAddr(&mac->phy, ram_addr++, hdr_len);
@@ -413,15 +525,33 @@ int 	__mac_mrf24j40_write(struct mac_mrf24j40* mac, struct mac_mrf24j40_write_pa
 	PHY_mrf24j40_setLongRAMAddr(&mac->phy, ram_addr++, mac->txSeq++);
 	PHY_mrf24j40_setLongRAMAddr(&mac->phy, ram_addr++, (trans->destPANId & 0x00FF));
 	PHY_mrf24j40_setLongRAMAddr(&mac->phy, ram_addr++, ((trans->destPANId & 0xFF00) >> 8));
+	// 8 byte
 	if(trans->flags.bits.broadcast){
-		PHY_mrf24j40_setLongRAMAddr(&mac->phy, ram_addr++, 0xFF);
-		PHY_mrf24j40_setLongRAMAddr(&mac->phy, ram_addr++, 0xFF);
+		if(frmCtrl.bits.destAddrMode == mac_iee802154_addrmode_16bit){
+			PHY_mrf24j40_setLongRAMAddr(&mac->phy, ram_addr++, 0xFF);
+			PHY_mrf24j40_setLongRAMAddr(&mac->phy, ram_addr++, 0xFF);
+		}else{
+			for(i = 0; i < 8 ; i++)
+				PHY_mrf24j40_setLongRAMAddr(&mac->phy, ram_addr++, 0xFF);
+		}
 	}else{
-		PHY_mrf24j40_setLongRAMAddr(&mac->phy, ram_addr++, trans->destAddress & 0x00FF);
-		PHY_mrf24j40_setLongRAMAddr(&mac->phy, ram_addr++, ((trans->destAddress & 0x00FF00) >> 8));
+		if(frmCtrl.bits.destAddrMode == mac_iee802154_addrmode_16bit){
+			PHY_mrf24j40_setLongRAMAddr(&mac->phy, ram_addr++, ((trans->destAddress) & 0x00FF));
+			PHY_mrf24j40_setLongRAMAddr(&mac->phy, ram_addr++, ((trans->destAddress >> 8) & 0x00FF));
+		}else{
+			for(i = 0; i < 8 ; i++)
+				PHY_mrf24j40_setLongRAMAddr(&mac->phy, ram_addr++, ((trans->destAddress >> (8*i)) & 0x00FF));
+		}
 	}
-	PHY_mrf24j40_setLongRAMAddr(&mac->phy, ram_addr++, mac->networkAddress & 0x00FF);
-	PHY_mrf24j40_setLongRAMAddr(&mac->phy, ram_addr++, ((mac->networkAddress & 0x00FF00) >> 8));
+	if(frmCtrl.bits.srcAddrMode == mac_iee802154_addrmode_16bit){
+		PHY_mrf24j40_setLongRAMAddr(&mac->phy, ram_addr++, (mac->phy.s_address[0]));
+		PHY_mrf24j40_setLongRAMAddr(&mac->phy, ram_addr++, (mac->phy.s_address[1]));
+	}else{
+		for(i = 0; i < 8; i++){
+			PHY_mrf24j40_setLongRAMAddr(&mac->phy, ram_addr++, (mac->phy.l_address[i] & 0x00FF));
+		}
+	}
+
 	p = (uint8_t*)payload;
 	for(i = 0; i < payloadlen; i++){
 		PHY_mrf24j40_setLongRAMAddr(&mac->phy, ram_addr++, p[i]);
@@ -479,7 +609,7 @@ int		MAC_mrf24j40_ioctl(struct mac_mrf24j40* mac, int request, unsigned int argu
 			ch_assessment->noise_level = PHY_mrf24j40_getShortRAMAddr(&mac->phy, PHY_MRF24J40_READ_BBREG6);
 			while(((ch_assessment->noise_level & 0x01) != 0x01) && (ret > 0)){
 				ch_assessment->noise_level = PHY_mrf24j40_getShortRAMAddr(&mac->phy, PHY_MRF24J40_READ_BBREG6);
-				usleep_s(1000*10);
+				usleep(1000*10);
 				ret -= 10;
 			}
 			ch_assessment->noise_level = PHY_mrf24j40_getLongRAMAddr(&mac->phy, 0x210);
@@ -500,6 +630,24 @@ int		MAC_mrf24j40_ioctl(struct mac_mrf24j40* mac, int request, unsigned int argu
 			__mac_mrf24j40_unlock(mac);
 			break;
 		}
+		case mac_mrf24j40_ioc_set_long_address:{
+			uint8_t* pu8 = (uint8_t*)arguments;
+			PHY_mrf24j40_set_long_address(&mac->phy, pu8);
+			ret = 0;
+			break;
+		}
+		case mac_mrf24j40_ioc_set_short_address:{
+			uint8_t* pu8 = (uint8_t*)arguments;
+			PHY_mrf24j40_set_short_address(&mac->phy, pu8);
+			ret = 0;
+			break;
+		}
+		case mac_mrf24j40_ioc_set_pan_id:{
+			uint8_t* pu8 = (uint8_t*)arguments;
+			PHY_mrf24j40_set_pan_id(&mac->phy, pu8);
+			ret = 0;
+			break;
+		}
 	}
 	return ret;
 }
@@ -518,8 +666,10 @@ int 	MAC_mrf24j40_task(struct mac_mrf24j40* mac){
 		u8val = PHY_mrf24j40_getShortRAMAddr(&mac->phy, PHY_MRF24J40_READ_TXSR);
 	}
 	if(flags.bits.RF_RXIF){
+		/* |frame_len(n+m+2)|header(m)|data(n)|FCS(2)|LQI(1)|RSSI(1)|
+		 * */
 		PHY_mrf24j40_setShortRAMAddr(&mac->phy, PHY_MRF24J40_WRITE_BBREG1, 0x40);	// Disable RX
-		u8len = PHY_mrf24j40_getLongRAMAddr(&mac->phy, 0x300) + 2;
+		u8len = PHY_mrf24j40_getLongRAMAddr(&mac->phy, 0x300) + 4;
 		if(u8len > 144) u8len = 144;
 		rxBuf[0] = u8len;
 		for(i = 1 ;i < u8len; i++){
@@ -536,9 +686,8 @@ int 	MAC_mrf24j40_task(struct mac_mrf24j40* mac){
 			}
 		}
 		if(read_item){
-			if(u8len > MAC_MRF24J40_READ_PAYLOAD_MAX_LENGTH-1+10) u8len = MAC_MRF24J40_READ_PAYLOAD_MAX_LENGTH-1+10;
-			memcpy_s(read_item->payload, &rxBuf[10], u8len + 1 - 10);
-			read_item->payload_len = u8len+1-10;
+			memcpy(read_item->payload, &rxBuf[0], u8len);
+			read_item->payload_len = u8len;
 			read_item->flags |= 0x01;	// set flags
 			mac->flags |= ((uint8_t)1 << MAC_MRF24J40_FLAG_RX_DONE);
 			flag_event_post(&mac->rx_event);
