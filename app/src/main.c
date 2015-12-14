@@ -1,4 +1,7 @@
-/*POSIX API*/
+/**
+ * note:
+ * 	do not include stdio.h (rx uart not work !!!)
+ */
 #include <drv_api.h>
 #include <pthread.h>
 #include <unistd.h>
@@ -7,7 +10,6 @@
 #include <semaphore.h>
 #include <mqueue.h>
 #include <string.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <spidev.h>
 #include <drv_gpio.h>
@@ -121,7 +123,8 @@ void LREP(char* s, ...){
     sem_post(&g_sem_debug);
 }
 struct mac_mrf24j40_open_param  rf_mac_init;
-
+extern void*		___dev_lookup_begin;
+extern void*		___dev_lookup_end;
 void *Thread_Startup(void *pvParameters){
     int i,j;
     struct termios2 opt;
@@ -218,7 +221,6 @@ void *Thread_Startup(void *pvParameters){
     }
     srand(0);
     usleep(1000* 100);
-
 MAIN_MENU:
     LREP("------- Main menu ------\r\n");
     LREP("1. Test\r\n");

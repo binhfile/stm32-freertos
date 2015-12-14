@@ -45,8 +45,9 @@ int random_init		(void){
 module_init(random_init);
 int 	random_open	(struct platform_device *dev, int flags){
 	int ret;
+	RCC_AHB2PeriphClockCmd(RCC_AHB2Periph_RNG, ENABLE);
+//	RNG_ITConfig(DISABLE);
 	RNG_Cmd(ENABLE);
-	RNG_ITConfig(DISABLE);
 	ret = 0;
 	return ret;
 }
@@ -58,16 +59,26 @@ int		random_read		(struct platform_device *dev, void* buf, int count){
 	int ret = 0;
 	uint8_t* pu8 = (uint8_t*)buf;
 	uint32_t u32Val;
+
 	while(count > 0){
-		RNG_Cmd(ENABLE);
-		while(RNG_GetITStatus(RNG_FLAG_DRDY | RNG_FLAG_CECS | RNG_FLAG_SECS) == RESET){}
-		if(RNG_GetFlagStatus(RNG_FLAG_DRDY) == SET){
-			u32Val = RNG_GetRandomNumber();
-			if(count > 0){ *pu8 = u32Val; pu8++; count--; ret++;}
-			if(count > 0){ *pu8 = ((u32Val >> 8)& 0x00FF); pu8++; count--; ret++;}
-			if(count > 0){ *pu8 = ((u32Val >> 16)& 0x00FF); pu8++; count--; ret++;}
-			if(count > 0){ *pu8 = ((u32Val >> 24)& 0x00FF); pu8++; count--; ret++;}
-		}else break;
+		while(RNG_GetFlagStatus(RNG_FLAG_DRDY) == RESET){}
+		u32Val = RNG_GetRandomNumber();
+
+		if(RNG_GetFlagStatus(RNG_FLAG_SECS) == SET){
+			RNG_ClearFlag(RNG_FLAG_SECS);
+			RNG_Cmd(ENABLE);
+			ret = -1;
+			break;
+		}
+		if(RNG_GetFlagStatus(RNG_FLAG_CECS) == SET){
+			RNG_ClearFlag(RNG_FLAG_CECS);
+			ret = -2;
+			break;
+		}
+		if(count > 0){ *pu8 = u32Val; pu8++; count--; ret++;}
+		if(count > 0){ *pu8 = ((u32Val >> 8)& 0x00FF); pu8++; count--; ret++;}
+		if(count > 0){ *pu8 = ((u32Val >> 16)& 0x00FF); pu8++; count--; ret++;}
+		if(count > 0){ *pu8 = ((u32Val >> 24)& 0x00FF); pu8++; count--; ret++;}
 	}
 	return ret;
 }

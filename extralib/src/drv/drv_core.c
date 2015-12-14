@@ -19,9 +19,7 @@ int platform_driver_register(struct platform_driver *driver){
 	drv = g_list_drivers;
 	if(drv){
 		while(drv->next)
-		{
 			drv = drv->next;
-		}
 		drv->next = driver;
 		ret = 0;
 	}else{
@@ -51,9 +49,7 @@ int platform_device_register(struct platform_device *pdev){
 	if(drv){
 		p = drv->driver.devices;
 		if(p){
-			while(p->next){
-				p = p->next;
-			}
+			while(p->next) p = p->next;
 			p->next = pdev;
 			p_dev[s_dev_index] = pdev;
 			s_dev_index++;
@@ -176,7 +172,7 @@ int 	close	(int fd){
 	struct platform_driver *drv = 0;
 	struct platform_device **pdev = (struct platform_device **)&___dev_lookup_begin;
 
-	if(fd >= 0 && fd < (&___dev_lookup_end - &___dev_lookup_begin) / 4){
+	if(fd >= 0 && fd <= (&___dev_lookup_end - &___dev_lookup_begin)){
 		drv = (pdev[fd])->driver;
 		if(drv->close)
 			ret = drv->close(pdev[fd]);
@@ -218,7 +214,7 @@ int 	write	(int fd, const void *buf, size_t count){
 	struct platform_driver *drv = 0;
 	struct platform_device **pdev = (struct platform_device **)&___dev_lookup_begin;
 
-	if(fd >= 0 && fd < (&___dev_lookup_end - &___dev_lookup_begin) / 4){
+	if(fd >= 0 && fd <= (&___dev_lookup_end - &___dev_lookup_begin)){
 		drv = (pdev[fd])->driver;
 		if(drv->write)
 			ret = drv->write(pdev[fd], buf, count);
@@ -260,7 +256,7 @@ int 	read	(int fd, void *buf, size_t count){
 	struct platform_driver *drv = 0;
 	struct platform_device **pdev = (struct platform_device **)&___dev_lookup_begin;
 
-	if(fd >= 0 && fd < (&___dev_lookup_end - &___dev_lookup_begin) / 4){
+	if(fd >= 0 && fd <= (&___dev_lookup_end - &___dev_lookup_begin)){
 		drv = (pdev[fd])->driver;
 		if(drv->read)
 			ret = drv->read(pdev[fd], buf, count);
@@ -302,7 +298,7 @@ int 	ioctl	(int fd, int request, unsigned int arguments){
 	struct platform_driver *drv = 0;
 	struct platform_device **pdev = (struct platform_device **)&___dev_lookup_begin;
 
-	if(fd >= 0 && fd < (&___dev_lookup_end - &___dev_lookup_begin) / 4){
+	if(fd >= 0 && fd <= (&___dev_lookup_end - &___dev_lookup_begin)){
 		drv = (pdev[fd])->driver;
 		if(drv->ioctl)
 			ret = drv->ioctl(pdev[fd], request, arguments);
@@ -364,7 +360,7 @@ int 	select(int fd, fd_set *readfds, fd_set *writefds,
 	int readfd = 0, writefd = 0, errorfd = 0;
 	int s_timeout = 0;
 
-	if(fd >= 0 && fd < (&___dev_lookup_end - &___dev_lookup_begin) / 4){
+	if(fd >= 0 && fd <= (&___dev_lookup_end - &___dev_lookup_begin)){
 		drv = (pdev[fd])->driver;
 		if(drv->select){
 			if(readfds) readfd 		= 1;
