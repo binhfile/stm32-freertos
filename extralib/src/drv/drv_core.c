@@ -8,7 +8,10 @@ int    errno = 0;
 struct platform_driver* g_list_drivers	= 0;
 extern init_fxn		___drv_init_begin;
 extern init_fxn		___drv_init_end;
-extern void LREP(char* s, ...);
+
+extern void*		___dev_lookup_begin;
+extern void*		___dev_lookup_end;
+
 int platform_driver_register(struct platform_driver *driver){
 	int ret = -EPERM;
 	struct platform_driver *drv = 0;
@@ -16,7 +19,9 @@ int platform_driver_register(struct platform_driver *driver){
 	drv = g_list_drivers;
 	if(drv){
 		while(drv->next)
+		{
 			drv = drv->next;
+		}
 		drv->next = driver;
 		ret = 0;
 	}else{
@@ -31,7 +36,11 @@ int platform_device_register(struct platform_device *pdev){
 	struct platform_driver *drv 	= 0;
 	struct platform_device *p 		= 0;
 	struct platform_driver *p_drv 	= g_list_drivers;
+	void** p_dev;
 
+	static int s_dev_index = 0;
+
+	p_dev = &___dev_lookup_begin;
 	while(p_drv){
 		if(strcmp(p_drv->driver.name, pdev->name) == 0){
 			drv = p_drv;
@@ -42,12 +51,19 @@ int platform_device_register(struct platform_device *pdev){
 	if(drv){
 		p = drv->driver.devices;
 		if(p){
-			while(p->next) p = p->next;
+			while(p->next){
+				p = p->next;
+			}
 			p->next = pdev;
+			p_dev[s_dev_index] = pdev;
+			s_dev_index++;
 		}else{
 			drv->driver.devices = pdev;
+			p_dev[s_dev_index] = pdev;
+			s_dev_index++;
 		}
 		pdev->next = 0;
+		pdev->driver = drv;
 		ret = 0;
 	}
 	return ret;
@@ -62,6 +78,7 @@ int driver_probe(){
     return 0;
 }
 int open(const char *pathname, int flags){
+#if 0
 	int ret = -EPERM;
 	struct platform_driver *drv = g_list_drivers;
 	struct platform_device *pdev = 0;
@@ -97,8 +114,36 @@ int open(const char *pathname, int flags){
 	}else{
 	}
 	return ret;
+#else
+	int ret = -EPERM;
+	struct platform_driver *drv = 0;
+	struct platform_device **pdev = (struct platform_device **)&___dev_lookup_begin;
+	int found = 0;
+	int dev_index = 0;
+
+	while(pdev < (struct platform_device **)&___dev_lookup_end){
+		if(strcmp((*pdev)->dev_name, pathname) == 0){
+			found = 1;
+			break;
+		}
+		pdev++;
+		dev_index++;
+	}
+	if(found){
+		drv = (*pdev)->driver;
+		found = drv->open((*pdev), flags);
+		if(found >= 0){
+			ret = dev_index;
+		}else{
+			ret = -EPERM;
+		}
+	}else{
+	}
+	return ret;
+#endif
 }
 int 	close	(int fd){
+#if 0
 	int ret = -EPERM;
 	struct platform_driver *drv = g_list_drivers;
 	struct platform_device *pdev = 0;
@@ -126,8 +171,21 @@ int 	close	(int fd){
 	if(drv->close)
 		ret = drv->close(pdev);
 	return ret;
+#else
+	int ret = -EPERM;
+	struct platform_driver *drv = 0;
+	struct platform_device **pdev = (struct platform_device **)&___dev_lookup_begin;
+
+	if(fd >= 0 && fd < (&___dev_lookup_end - &___dev_lookup_begin) / 4){
+		drv = (pdev[fd])->driver;
+		if(drv->close)
+			ret = drv->close(pdev[fd]);
+	}
+	return ret;
+#endif
 }
 int 	write	(int fd, const void *buf, size_t count){
+#if 0
 	int ret = -EPERM;
 	struct platform_driver *drv = g_list_drivers;
 	struct platform_device *pdev = 0;
@@ -155,8 +213,21 @@ int 	write	(int fd, const void *buf, size_t count){
 	if(drv->write)
 		ret = drv->write(pdev, buf, count);
 	return ret;
+#else
+	int ret = -EPERM;
+	struct platform_driver *drv = 0;
+	struct platform_device **pdev = (struct platform_device **)&___dev_lookup_begin;
+
+	if(fd >= 0 && fd < (&___dev_lookup_end - &___dev_lookup_begin) / 4){
+		drv = (pdev[fd])->driver;
+		if(drv->write)
+			ret = drv->write(pdev[fd], buf, count);
+	}
+	return ret;
+#endif
 }
 int 	read	(int fd, void *buf, size_t count){
+#if 0
 	int ret = -EPERM;
 	struct platform_driver *drv = g_list_drivers;
 	struct platform_device *pdev = 0;
@@ -184,8 +255,21 @@ int 	read	(int fd, void *buf, size_t count){
 	if(drv->read)
 		ret = drv->read(pdev, buf, count);
 	return ret;
+#else
+	int ret = -EPERM;
+	struct platform_driver *drv = 0;
+	struct platform_device **pdev = (struct platform_device **)&___dev_lookup_begin;
+
+	if(fd >= 0 && fd < (&___dev_lookup_end - &___dev_lookup_begin) / 4){
+		drv = (pdev[fd])->driver;
+		if(drv->read)
+			ret = drv->read(pdev[fd], buf, count);
+	}
+	return ret;
+#endif
 }
 int 	ioctl	(int fd, int request, unsigned int arguments){
+#if 0
 	int ret = -EPERM;
 	struct platform_driver *drv = g_list_drivers;
 	struct platform_device *pdev = 0;
@@ -213,9 +297,22 @@ int 	ioctl	(int fd, int request, unsigned int arguments){
 	if(drv->ioctl)
 		ret = drv->ioctl(pdev, request, arguments);
 	return ret;
+#else
+	int ret = -EPERM;
+	struct platform_driver *drv = 0;
+	struct platform_device **pdev = (struct platform_device **)&___dev_lookup_begin;
+
+	if(fd >= 0 && fd < (&___dev_lookup_end - &___dev_lookup_begin) / 4){
+		drv = (pdev[fd])->driver;
+		if(drv->ioctl)
+			ret = drv->ioctl(pdev[fd], request, arguments);
+	}
+	return ret;
+#endif
 }
 int 	select(int fd, fd_set *readfds, fd_set *writefds,
 		  fd_set *exceptfds, struct timeval *timeout){
+#if 0
 	int ret = -EPERM;
 	struct platform_driver *drv = g_list_drivers;
 	struct platform_device *pdev = 0;
@@ -260,6 +357,40 @@ int 	select(int fd, fd_set *readfds, fd_set *writefds,
 		}
 	}
 	return ret;
+#else
+	int ret = -EPERM;
+	struct platform_driver *drv = 0;
+	struct platform_device **pdev = (struct platform_device **)&___dev_lookup_begin;
+	int readfd = 0, writefd = 0, errorfd = 0;
+	int s_timeout = 0;
+
+	if(fd >= 0 && fd < (&___dev_lookup_end - &___dev_lookup_begin) / 4){
+		drv = (pdev[fd])->driver;
+		if(drv->select){
+			if(readfds) readfd 		= 1;
+			if(writefds) writefd 	= 1;
+			if(exceptfds) errorfd 	= 1;
+
+			s_timeout = 0;
+			if(timeout){
+#if 1
+				s_timeout = timeout->tv_sec * 1000 * portTICK_PERIOD_MS;
+				s_timeout += timeout->tv_usec / 1000 * portTICK_PERIOD_MS;
+#else
+				s_timeout = (timeout->tv_sec << 10);
+				s_timeout += ((timeout->tv_usec > 1024) ? (timeout->tv_usec >> 10) : 1);	// 1000us(10^-6) = 1ms(10^-3)
+#endif
+			}
+			ret = drv->select(pdev[fd], &readfd, &writefd, &errorfd, s_timeout);
+			if(ret > 0){
+				if(readfds && readfd) 	FD_SET(fd, readfds);
+				if(writefds && writefd) FD_SET(fd, writefds);
+				if(exceptfds && errorfd) FD_SET(fd, exceptfds);
+			}
+		}
+	}
+	return ret;
+#endif
 }
 
 void 	FD_CLR	(int fd, fd_set *set){

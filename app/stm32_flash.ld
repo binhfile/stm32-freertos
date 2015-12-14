@@ -118,7 +118,11 @@ SECTIONS
     
      ___drv_init_begin = .;
      KEEP (*(.drv_init))
-     ___drv_init_end = .;
+     ___drv_init_end = .;    
+     
+     ___dev_lookup_begin = .;
+     KEEP (*(.dev_lookup))
+     ___dev_lookup_end = .;
 
     . = ALIGN(4);
     _edata = .;        /* define a global symbol at data end */

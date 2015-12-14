@@ -199,6 +199,26 @@ struct platform_device g_random_device = {
 	.id 		= 0,
 	.next 		= 0,
 };
+
+device_init(g_usart_debug_device);
+
+device_init(g_gpio_led_red_device);
+device_init(g_gpio_led_green_device);
+device_init(g_gpio_led_orange_device);
+device_init(g_gpio_led_blue_device);
+device_init(g_gpio_button_device);
+device_init(g_gpio_rf_cs_device);
+device_init(g_gpio_rf_reset_device);
+device_init(g_gpio_rf_intr_device);
+
+device_init(g_gpio_at93c_cs_device);
+device_init(g_gpio_at93c_sck_device);
+device_init(g_gpio_at93c_mosi_device);
+device_init(g_gpio_at93c_miso_device);
+
+device_init(g_rf_device);
+device_init(g_random_device);
+
 int board_register_devices(){
 	platform_device_register(&g_usart_debug_device);
 	

@@ -25,6 +25,7 @@ struct platform_device {
 	int             		id;			// id (index) of device
 	struct device   		dev;		// device spec
 	struct platform_device* next;// next device in list of drivers
+	void*					driver;
  };
 typedef struct pm_message {
 	int event;
@@ -63,7 +64,11 @@ int platform_device_register(struct platform_device *pdev);		// register a devic
 //#define offsetof(TYPE, MEMBER) ((int) &((TYPE *)0)->MEMBER)
 //#define container_of(ptr, type, member) (type *)(((int)ptr) - offsetof(type, member))
 //#define DRV_REGISTER(drv) struct platform_driver* drv_##drv __attribute__((__section__(".drv"))) = (struct platform_driver*)&drv
-#define module_init(fxn) init_fxn drv_init_fx_##fxn __attribute__((__section__(".drv_init"))) = (init_fxn)&fxn
+#define module_init(fxn) \
+	init_fxn drv_init_fx_##fxn __attribute__((__section__(".drv_init"))) = (init_fxn)&fxn;
+
+#define device_init(dev) \
+	volatile void* dev_lookup_##dev __attribute__((__section__(".dev_lookup"))) = 0;
 
 #ifdef	__cplusplus
 }

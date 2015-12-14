@@ -59,8 +59,8 @@ LDFLAGS =-nostdlib -T $(LDSCRIPT) --specs=nosys.specs $(MCFLAGS) -Wl,-Map=bin/ap
 ###
 # Optimizations
 CXXFLAGS+=-fno-exceptions -O2 -ffunction-sections -fdata-sections -fno-builtin -fno-rtti
-CFLAGS+=-O2 -ffunction-sections -fdata-sections -fno-builtin 
-LDFLAGS+=-O2 -Wl,-gc-sections --specs=nano.specs
+CFLAGS+=-O3 -ffunction-sections -fdata-sections -fno-builtin 
+LDFLAGS+=-O3 -Wl,-gc-sections --specs=nano.specs
 ###
 # Build Rules
 .PHONY: all release release-memopt debug clean

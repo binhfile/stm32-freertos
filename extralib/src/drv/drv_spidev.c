@@ -25,6 +25,8 @@ SPI6 	PG14 	PG12 	PG13 													2
 #include "semphr.h"
 #include "event_groups.h"
 
+#define DRV_SPI_ISR_ENABLED		0
+
 int 	spi_init		(void);
 int 	spi_open		(struct platform_device *dev, int flags);
 int 	spi_close		(struct platform_device *dev);
@@ -36,7 +38,9 @@ struct spi_driver_speed_ref{
 	unsigned char scale;
 };
 struct spi_driver_arch_data{
+#if DRV_SPI_ISR_ENABLED == 1
 	void* rx_event[SPI_MODULE_COUNT];
+#endif
 	SPI_InitTypeDef 	SPI_InitStruct[SPI_MODULE_COUNT];
 	struct spi_driver_speed_ref 		speed_supported[SPI_DRIVER_SPEED_CNT];
 };
@@ -113,12 +117,14 @@ int 	spi_open	(struct platform_device *dev, int flags){
 	int ret;
 	struct spi_platform_data* data;	
 	GPIO_InitTypeDef 	GPIO_InitStruct;
-//	NVIC_InitTypeDef 	NVIC_InitStructure;
 	SPI_TypeDef* 		SPIx = 0;
 	int bank, pin;
 	uint8_t GPIO_AF = GPIO_AF_SPI1;
-//	uint8_t NVIC_IRQChannel;
-	
+#if DRV_SPI_ISR_ENABLED == 1
+	uint8_t NVIC_IRQChannel;
+	NVIC_InitTypeDef 	NVIC_InitStructure;
+#endif
+
 	ret = -EPERM;
 	data = (struct spi_platform_data*)dev->dev.platform_data;
 	
@@ -128,21 +134,27 @@ int 	spi_open	(struct platform_device *dev, int flags){
 		case 0:{
 			GPIO_AF = GPIO_AF_SPI1;
 			SPIx = SPI1;
-//			NVIC_IRQChannel = SPI1_IRQn;
+#if DRV_SPI_ISR_ENABLED == 1
+			NVIC_IRQChannel = SPI1_IRQn;
+#endif
 			RCC_APB2PeriphClockCmd(RCC_APB2Periph_SPI1, ENABLE);
 			break;
 		}
 		case 1:{
 			GPIO_AF = GPIO_AF_SPI2;
 			SPIx = SPI2;
-//			NVIC_IRQChannel = SPI2_IRQn;
+#if DRV_SPI_ISR_ENABLED == 1
+			NVIC_IRQChannel = SPI2_IRQn;
+#endif
 			RCC_APB1PeriphClockCmd(RCC_APB1Periph_SPI2, ENABLE);
 			break;
 		}
 		case 2:{
 			GPIO_AF = GPIO_AF_SPI3;
 			SPIx = SPI3;
-//			NVIC_IRQChannel = SPI3_IRQn;
+#if DRV_SPI_ISR_ENABLED == 1
+			NVIC_IRQChannel = SPI3_IRQn;
+#endif
 			RCC_APB1PeriphClockCmd(RCC_APB1Periph_SPI3, ENABLE);
 			break;
 		}
@@ -214,19 +226,22 @@ int 	spi_open	(struct platform_device *dev, int flags){
 	g_spi_driver_arch_data.SPI_InitStruct[dev->id].SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_64; 	// SPI frequency is APB2 frequency / 4
 	g_spi_driver_arch_data.SPI_InitStruct[dev->id].SPI_FirstBit 	= SPI_FirstBit_MSB;					// data is transmitted MSB first
 	SPI_Init(SPIx, &g_spi_driver_arch_data.SPI_InitStruct[dev->id]); 
-	
+#if DRV_SPI_ISR_ENABLED == 1
 	// interrupt
-	//SPI_I2S_ITConfig(SPIx, SPI_I2S_IT_RXNE, ENABLE);
-	//NVIC_InitStructure.NVIC_IRQChannel = NVIC_IRQChannel;
-	//NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 7;
-	//NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
-	//NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
-	//NVIC_Init(&NVIC_InitStructure);
+	SPI_I2S_ITConfig(SPIx, SPI_I2S_IT_RXNE, ENABLE);
+	NVIC_InitStructure.NVIC_IRQChannel = NVIC_IRQChannel;
+	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 7;
+	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
+	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+	NVIC_Init(&NVIC_InitStructure);
+#endif
 	SPI_Cmd(SPIx, ENABLE); // enable SPI1	
 	
 	data->__drv_base = SPIx;
+#if DRV_SPI_ISR_ENABLED == 1
 	if(!g_spi_driver_arch_data.rx_event[dev->id])
 		g_spi_driver_arch_data.rx_event[dev->id] = xQueueCreate(32, 1);
+#endif
 	ret = 0;
 	return ret;
 }
@@ -278,10 +293,14 @@ int		spi_ioctl	(struct platform_device *dev, int request, unsigned int arguments
 				}
 				else
 					SPIx->DR = 0;
+
+#if DRV_SPI_ISR_ENABLED == 1
+				if(xQueueReceive(g_spi_driver_arch_data.rx_event[dev->id], &u8val, portTICK_PERIOD_MS * 100) != pdTRUE)
+					break;
+#else
 				while(( SPIx->SR & 0x01) == 0 ){}
 				u8val = SPIx->DR;
-				//if(xQueueReceive(g_spi_driver_arch_data.rx_event[dev->id], &u8val, portTICK_PERIOD_MS * 100) != pdTRUE)
-				//	break;
+#endif
 				if(rx){
 					*rx = u8val;
 					rx++;
@@ -350,6 +369,7 @@ int		spi_ioctl	(struct platform_device *dev, int request, unsigned int arguments
 	}
 	return ret;
 }
+#if DRV_SPI_ISR_ENABLED == 1
 void SPI1_IRQHandler(void){
 	static BaseType_t xHigherPriorityTaskWoken;
 	static SPI_TypeDef* SPIx = SPI1;
@@ -389,4 +409,5 @@ void SPI3_IRQHandler(void){
 		portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
 	}
 }
+#endif
 // end of file
