@@ -6,6 +6,9 @@
  */
 #include <at93c.h>
 #include <drv_gpio.h>
+#include <fcntl.h>
+#include <unistd.h>
+
 #define DRV_AT93C_SET_GPIO(fd, val)	{\
 	u8val = val;\
 	write(fd, &u8val, 1);\
@@ -198,14 +201,14 @@ int at93c_fill(struct at93c_device* dev, unsigned char pattern){
 	DRV_AT93C_W_BIT(dev, 0);//1
 	DRV_AT93C_W_BIT(dev, 0);//0
 	// D7-D0
-	DRV_AT93C_W_BIT(dev, (pattern & (((uint8_t)1) << 7) != 0));//7
-	DRV_AT93C_W_BIT(dev, (pattern & (((uint8_t)1) << 6) != 0));//6
-	DRV_AT93C_W_BIT(dev, (pattern & (((uint8_t)1) << 5) != 0));//5
-	DRV_AT93C_W_BIT(dev, (pattern & (((uint8_t)1) << 4) != 0));//4
-	DRV_AT93C_W_BIT(dev, (pattern & (((uint8_t)1) << 3) != 0));//3
-	DRV_AT93C_W_BIT(dev, (pattern & (((uint8_t)1) << 2) != 0));//2
-	DRV_AT93C_W_BIT(dev, (pattern & (((uint8_t)1) << 1) != 0));//1
-	DRV_AT93C_W_BIT(dev, (pattern & (((uint8_t)1) << 0) != 0));//0
+	DRV_AT93C_W_BIT(dev, ((pattern & (((uint8_t)1) << 7)) != 0));//7
+	DRV_AT93C_W_BIT(dev, ((pattern & (((uint8_t)1) << 6)) != 0));//6
+	DRV_AT93C_W_BIT(dev, ((pattern & (((uint8_t)1) << 5)) != 0));//5
+	DRV_AT93C_W_BIT(dev, ((pattern & (((uint8_t)1) << 4)) != 0));//4
+	DRV_AT93C_W_BIT(dev, ((pattern & (((uint8_t)1) << 3)) != 0));//3
+	DRV_AT93C_W_BIT(dev, ((pattern & (((uint8_t)1) << 2)) != 0));//2
+	DRV_AT93C_W_BIT(dev, ((pattern & (((uint8_t)1) << 1)) != 0));//1
+	DRV_AT93C_W_BIT(dev, ((pattern & (((uint8_t)1) << 0)) != 0));//0
 	// cs = 0
 	DRV_AT93C_DELAY_CS(dev);
 	DRV_AT93C_SET_GPIO(dev->fd_cs, 0);
@@ -220,9 +223,10 @@ int at93c_fill(struct at93c_device* dev, unsigned char pattern){
 
 int at93c_init(struct at93c_device* dev){
 
+	return 0;
 }
 int at93c_destroy(struct at93c_device* dev){
-
+	return 0;
 }
 int at93c_ioctl(struct at93c_device* dev, int request, unsigned int args){
 	int ret = -1;

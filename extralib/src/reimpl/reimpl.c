@@ -17,19 +17,13 @@ int __errno = 0;
 #define CPU_ADDR	unsigned int
 #define DEF_YES		1
 #define DEF_NO		0
+#define DEF_ENABLED	1
+#define DEF_DISABLED 0
+#define LIB_MEM_CFG_ARG_CHK_EXT_EN DEF_ENABLED
 
 #define STR_MAX_LEN	4096
 #include <string.h>
 
-//size_t strlen(const char *s){
-//	size_t ret = 0;
-//	if(!s) return 0;
-//	while(*s){
-//		ret++;
-//		s++;
-//	}
-//	return ret;
-//}
 int strcmp(const char *p1_str, const char *p2_str){
     const  CPU_CHAR    *p1_str_cmp;
     const  CPU_CHAR    *p2_str_cmp;

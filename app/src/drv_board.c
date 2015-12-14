@@ -5,36 +5,38 @@
 /**
  * A0 - Button
  * A1 - RF
- * A2
- * A3
+ * A2 -
+ * A3 -
  *
- * B6 - UART
- * B7
+ * B6 - DEBUG
+ * B7 -
  * B10- RF
  *
  * C2 - RF
- * C3
+ * C3 -
  *
  * D12- LED green
- * D13
- * D14
- * D15
+ * D13-
+ * D14-
+ * D15-
  *
- *
- *
+ * E2 - EEPROM
+ * E4 -
+ * E5 -
+ * E6 -
  *
  */
 /*usart*/
-struct usart_platform_data g_usart_1_data = {
+struct usart_platform_data g_usart_debug_data = {
 	.tx_pin = gpio_get_pin('B', 6),// PB6
 	.rx_pin = gpio_get_pin('B', 7),// PB7
 };
-struct platform_device g_usart_1_device = {
-	.dev_name 	= "usart-1",
+struct platform_device g_usart_debug_device = {
+	.dev_name 	= "debug-dev",
 	.name     	= "usart-drv",
 	.id 	  	= 0,
 	.dev 		= {
-		.platform_data = &g_usart_1_data,
+		.platform_data = &g_usart_debug_data,
 	},
 	.next 		= 0,
 };
@@ -107,8 +109,8 @@ struct platform_device g_gpio_button_device = {
 	.id 		= gpio_get_pin('A', 0),	// A0
 	.next 		= 0,
 };
-struct platform_device g_gpio_spi1_cs_device = {
-	.dev_name 	= "spi-1-cs",
+struct platform_device g_gpio_rf_cs_device = {
+	.dev_name 	= "rf-cs",
 	.name     	= "gpio-drv",
 	.dev 		= {
 		.platform_data = &g_gpio_mrf_output_data,
@@ -135,18 +137,18 @@ struct platform_device g_gpio_rf_intr_device = {
 	.next 		= 0,
 };
 /*spi*/
-struct spi_platform_data g_spi_1_data = {
+struct spi_platform_data g_rf_data = {
 	.sck_pin 	= gpio_get_pin('B', 10),	// SPI_1
 	.ss_pin 	= GPIO_PIN_INVALID,
 	.mosi_pin 	= gpio_get_pin('C', 3),
 	.miso_pin 	= gpio_get_pin('C', 2),
 };
-struct platform_device g_spi_1_device = {
-	.dev_name 	= "spi-1",
+struct platform_device g_rf_device = {
+	.dev_name 	= "rf",
 	.name     	= "spidev-drv",
 	.id 	  	= 1,
 	.dev 		= {
-		.platform_data = &g_spi_1_data,
+		.platform_data = &g_rf_data,
 	},
 	.next 		= 0,
 };
@@ -187,16 +189,25 @@ struct platform_device g_gpio_at93c_miso_device = {
 	.id 		= gpio_get_pin('E', 5),
 	.next 		= 0,
 };
-
+// random
+struct platform_device g_random_device = {
+	.dev_name 	= "random-dev",
+	.name     	= "random-drv",
+	.dev 		= {
+		.platform_data = 0,
+	},
+	.id 		= 0,
+	.next 		= 0,
+};
 int board_register_devices(){
-	platform_device_register(&g_usart_1_device);
+	platform_device_register(&g_usart_debug_device);
 	
 	platform_device_register(&g_gpio_led_red_device);
 	platform_device_register(&g_gpio_led_green_device);
 	platform_device_register(&g_gpio_led_orange_device);
 	platform_device_register(&g_gpio_led_blue_device);
 	platform_device_register(&g_gpio_button_device);
-	platform_device_register(&g_gpio_spi1_cs_device);
+	platform_device_register(&g_gpio_rf_cs_device);
 	platform_device_register(&g_gpio_rf_reset_device);
 	platform_device_register(&g_gpio_rf_intr_device);
 	
@@ -205,7 +216,8 @@ int board_register_devices(){
 	platform_device_register(&g_gpio_at93c_mosi_device);
 	platform_device_register(&g_gpio_at93c_miso_device);
 
-	platform_device_register(&g_spi_1_device);
+	platform_device_register(&g_rf_device);
+	platform_device_register(&g_random_device);
 	return 0;
 }
 //end of file

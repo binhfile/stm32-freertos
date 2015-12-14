@@ -231,7 +231,7 @@ int 	gpio_close	(struct platform_device *dev){
 }
 int		gpio_read	(struct platform_device *dev, void* buf, int count){
 	int ret = -EPERM;
-	struct gpio_platform_data* data = (struct gpio_platform_data*)dev->dev.platform_data;
+//	struct gpio_platform_data* data = (struct gpio_platform_data*)dev->dev.platform_data;
 	unsigned char* p = (unsigned char*)buf;
 	int bank = gpio_get_bank_index(dev->id);
 	int pin = gpio_get_pin_index(dev->id);
@@ -246,7 +246,7 @@ int		gpio_read	(struct platform_device *dev, void* buf, int count){
 }
 int		gpio_write	(struct platform_device *dev, const void* buf, int count){
 	int ret = -EPERM;
-	struct gpio_platform_data* data = (struct gpio_platform_data*)dev->dev.platform_data;
+//	struct gpio_platform_data* data = (struct gpio_platform_data*)dev->dev.platform_data;
 	unsigned char* p = (unsigned char*)buf;
 	int bank = gpio_get_bank_index(dev->id);
 	int pin = gpio_get_pin_index(dev->id);
@@ -277,10 +277,8 @@ int		gpio_ioctl	(struct platform_device *dev, int request, unsigned int argument
 int		gpio_select(struct platform_device *dev, int *readfd, int *writefd, int *exceptfd, int timeout){
 	int ret = -EPERM;
 	EventBits_t uxBits;
-	uint8_t u8data;
-	int bank = gpio_get_bank_index(dev->id);
 	int pin = gpio_get_pin_index(dev->id);
-	struct gpio_platform_data* data = (struct gpio_platform_data*)dev->dev.platform_data;
+//	struct gpio_platform_data* data = (struct gpio_platform_data*)dev->dev.platform_data;
 	
 	if(readfd) 		*readfd = 0;
 	if(writefd) 	*writefd = 0;

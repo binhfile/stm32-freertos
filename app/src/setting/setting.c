@@ -7,6 +7,8 @@
 
 #include "setting.h"
 #include <debug.h>
+#include <stdlib.h>
+
 extern struct setting_device		g_setting_dev;
 
 const char* node_type_to_str(uint8_t type){
@@ -17,21 +19,14 @@ const char* node_type_to_str(uint8_t type){
 		default: return "Unknown"; break;
 	}
 }
-void setting_dump_to_stdio(struct setting_device *setting){
-	struct setting_value val;
+void setting_dump_to_stdio(struct setting_value *val){
 	int i;
-	memset(&val,0, sizeof(struct setting_value));
-	if(setting_read(setting, &val) < 0){
-		LREP("Read failed\r\n");
-	}else{
-		LREP("Setting:\r\n");
-		LREP("Magic: %02X (%s)\r\n", val.magic_id, (val.magic_id == setting_value_magic_id) ? "correct" : "INCorrect");
-		LREP("Note type: %d (%s)\r\n", val.network_type, node_type_to_str(val.network_type));
-		LREP("Long address: ");
-		for(i = 0; i < 7 ; i ++) LREP("%02X:", val.mac_long_address[i]);
-		LREP("%02X", val.mac_long_address[i]);
-		LREP("\r\n");
-	}
+	LREP("Magic: %02X (%s)\r\n", val->magic_id, (val->magic_id == setting_value_magic_id) ? "correct" : "INCorrect");
+	LREP("Note type: %d (%s)\r\n", val->network_type, node_type_to_str(val->network_type));
+	LREP("Long address: ");
+	for(i = 0; i < 7 ; i ++) LREP("%02X:", val->mac_long_address[i]);
+	LREP("%02X", val->mac_long_address[i]);
+	LREP("\r\n");
 }
 uint8_t hex_to_dec(uint8_t hex){
 	if(hex >= '0' && hex <= '9') return hex - '0';
@@ -43,6 +38,7 @@ void setting_write_from_stdio(struct setting_device *setting){
 	struct setting_value val;
 	int i;
 	uint8_t input;
+	uint32_t u32Val;
 	if(setting_read(setting, &val) < 0){
 		LREP("Read failed\r\n");
 	}else{
@@ -57,14 +53,35 @@ void setting_write_from_stdio(struct setting_device *setting){
 		// Long address
 		LREP("Long address: ");
 		for(i = 0; i < 7 ; i ++) LREP("%02X:", val.mac_long_address[i]);
-		LREP("%02X", val.mac_long_address[i]);
-		LREP(", new?\r\n");
-		for(i = 0; i < 8 ; i++){
-			LREP("addr[%d] ", i);
-			input = kbhit(1000*30); LREP("%c", input); val.mac_long_address[i] = (hex_to_dec(input) << 4) & 0xF0;
-			input = kbhit(1000*30); LREP("%c", input); val.mac_long_address[i] |= (hex_to_dec(input)) & 0x0F;
-			kbhit(1000*30);// ENTER
-			LREP("\r\n");
+		LREP("%02X\r\n", val.mac_long_address[i]);
+		LREP("1. Auto create random address\r\n");
+		LREP("2. Manual edit address\r\n");
+		input = kb_cmd("cmd");
+		if(input == '1'){
+			u32Val = rand();
+			val.mac_long_address[0] = (uint8_t)(u32Val & (uint32_t)0x00FF);
+			val.mac_long_address[1] = (uint8_t)((u32Val>> 8) & (uint32_t)0x00FF);
+			val.mac_long_address[2] = (uint8_t)((u32Val>> 16) & (uint32_t)0x00FF);
+			val.mac_long_address[3] = (uint8_t)((u32Val>> 24) & (uint32_t)0x00FF);
+			u32Val = rand();
+			val.mac_long_address[4] = (uint8_t)(u32Val & (uint32_t)0x00FF);
+			val.mac_long_address[5] = (uint8_t)((u32Val>> 8) & (uint32_t)0x00FF);
+			val.mac_long_address[6] = (uint8_t)((u32Val>> 16) & (uint32_t)0x00FF);
+			val.mac_long_address[7] = (uint8_t)((u32Val>> 24) & (uint32_t)0x00FF);
+			LREP("New address: ");
+			for(i = 0; i < 7 ; i ++) LREP("%02X:", val.mac_long_address[i]);
+			LREP("%02X\r\n", val.mac_long_address[i]);
+		}else if(input == '2'){
+			for(i = 0; i < 8 ; i++){
+				LREP("address[%d]: ", i);
+				input = kbhit(1000*30); LREP("%c", input); val.mac_long_address[i] = (hex_to_dec(input) << 4) & 0xF0;
+				input = kbhit(1000*30); LREP("%c", input); val.mac_long_address[i] |= (hex_to_dec(input)) & 0x0F;
+				kbhit(1000*30);// ENTER
+				LREP("\r\n");
+			}
+		}else{
+			LREP("Not write setting\r\n");
+			return;
 		}
 		// write back
 		val.magic_id = setting_value_magic_id;
@@ -83,7 +100,10 @@ void setting_menu(){
 		switch(input){
 			case 'q': break;
 			case '1':{
-				setting_dump_to_stdio(&g_setting_dev);
+				struct setting_value val;
+				setting_read(&g_setting_dev, &val);
+				LREP("Setting:\r\n");
+				setting_dump_to_stdio(&val);
 				break;
 			}
 			case '2':{

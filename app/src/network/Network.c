@@ -6,6 +6,9 @@
  */
 
 #include "Network.h"
+#include <debug.h>
+#include <unistd.h>
+
 #define NETWORK_H_BAR_LEN	80
 int Network_scan_channel(struct mac_mrf24j40 *mac, uint32_t channels, uint8_t * noise_level){
 	int timeout = 1000;

@@ -11,6 +11,7 @@
 #include "semphr.h"
 
 #include <termios.h>
+#include <string.h>
 
 int 	usart_init		(void);
 int 	usart_open		(struct platform_device *dev, int flags);
@@ -56,12 +57,9 @@ module_init(usart_init);
 int 	usart_open		(struct platform_device *dev, int flags){
 	int ret = -EPERM;
 	struct usart_platform_data* data = (struct usart_platform_data*)dev->dev.platform_data;
-	uint32_t RCC_AHB1Periph;
-	uint16_t GPIO_PinSource;
 	uint8_t GPIO_AF;
 	uint8_t NVIC_IRQChannel;
 	unsigned int bank, pin;	
-	GPIO_TypeDef* GPIOx;
 	USART_TypeDef* USARTx;
 	USART_InitTypeDef USART_InitStructure;
 	GPIO_InitTypeDef  GPIOInitStructure;
@@ -162,7 +160,6 @@ int 	usart_open		(struct platform_device *dev, int flags){
 }
 int 	usart_close		(struct platform_device *dev){
 	int ret = -EPERM;
-	USART_TypeDef* USARTx;
 	struct usart_platform_data* data = (struct usart_platform_data*)dev->dev.platform_data;
 
 	if(!dev || dev->id < 0 || dev->id >= USART_MODULE_COUNT) return ret;
@@ -170,11 +167,8 @@ int 	usart_close		(struct platform_device *dev){
 	ret = 0;
 	return ret;
 }
-extern void LREP(char* s, ...);
 int		usart_read		(struct platform_device *dev, void* buf, int count){
 	int ret = -EPERM;
-	USART_TypeDef* USARTx;
-	struct usart_platform_data* data = (struct usart_platform_data*)dev->dev.platform_data;
 	unsigned char* p = (unsigned char*)buf;
 
 	if(!dev || dev->id < 0 || dev->id >= USART_MODULE_COUNT) return ret;
@@ -190,7 +184,6 @@ int		usart_read		(struct platform_device *dev, void* buf, int count){
 }
 int		usart_write	(struct platform_device *dev, const void* buf, int count){
 	int ret = -EPERM;
-	USART_TypeDef* USARTx;
 	struct usart_platform_data* data = (struct usart_platform_data*)dev->dev.platform_data;
 	unsigned char* p = (unsigned char*)buf;
 	if(!dev || dev->id < 0 || dev->id >= USART_MODULE_COUNT) return ret;
@@ -233,7 +226,6 @@ int		usart_ioctl	(struct platform_device *dev, int request, unsigned int argumen
 int		usart_select(struct platform_device *dev, int *readfd, int *writefd, int *exceptfd, int timeout){
 	int ret = -EPERM;
 	uint8_t u8data;
-	struct usart_platform_data* data = (struct usart_platform_data*)dev->dev.platform_data;
 	if(readfd) 		*readfd = 0;
 	if(writefd) 	*writefd = 0;
 	if(exceptfd) 	*exceptfd = 0;

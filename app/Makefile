@@ -8,6 +8,7 @@ AS=$(TOOLCHAIN_DIR)/bin/arm-none-eabi-as
 CP=$(TOOLCHAIN_DIR)/bin/arm-none-eabi-objcopy
 OD=$(TOOLCHAIN_DIR)/bin/arm-none-eabi-objdump
 SIZE=$(TOOLCHAIN_DIR)/bin/arm-none-eabi-size
+READELF=$(TOOLCHAIN_DIR)/bin/arm-none-eabi-readelf
 
 ###
 # Directory Structure
@@ -17,6 +18,7 @@ SRCDIR=src
 EXTRALIB_DIR=../extralib
 OS_DIR=../opensource/FreeRTOS
 HW_DIR=../opensource/STM32F4-Discovery_FW_V1.1.0
+#MESH_DIR=../opensource/LwMesh
 ###
 # Find source files
 ASOURCES=$(shell find -L $(SRCDIR) -name '*.s')
@@ -27,11 +29,13 @@ CSOURCES+=$(shell find -L $(EXTRALIB_DIR)/src -name '*.c')
 CSOURCES+=$(HW_DIR)/Utilities/STM32F4-Discovery/stm32f4_discovery.c
 CSOURCES+=$(shell find -L $(OS_DIR) -name '*.c')
 CSOURCES+=$(shell find -L $(HW_DIR)/Libraries/STM32F4xx_StdPeriph_Driver -name '*.c')
+#CSOURCES+=$(shell find -L $(MESH_DIR) -name '*.c')
 # Find header directories
 INC=$(shell find -L . -name '*.h' -exec dirname {} \; | uniq)
 INC+=$(shell find -L $(OS_DIR) -name '*.h' -exec dirname {} \; | uniq)
 INC+=$(shell find -L $(HW_DIR) -name '*.h' -exec dirname {} \; | uniq)
 INC+=$(shell find -L $(EXTRALIB_DIR)/include -name '*.h' -exec dirname {} \; | uniq)
+#INC+=$(shell find -L $(MESH_DIR) -name '*.h' -exec dirname {} \; | uniq)
 INCLUDES=$(INC:%=-I%)
 # Create object list
 OBJECTS+=$(CSRC_LIB:%.c=%.o)
@@ -44,57 +48,19 @@ BIN=outp.bin
 
 ###
 # MCU FLAGS
-MCFLAGS=-mcpu=cortex-m4 -mthumb -mlittle-endian \
--mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb-interwork
+MCFLAGS=-mcpu=cortex-m4 -mthumb -mlittle-endian -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb-interwork
 # COMPILE FLAGS
 DEFS=-DUSE_STDPERIPH_DRIVER -DSTM32F4XX
-CFLAGS  =-c $(MCFLAGS) $(DEFS) $(INCLUDES) -nostdlib
+CFLAGS  =-c $(MCFLAGS) $(DEFS) $(INCLUDES) -nostdlib -Wall
 # LINKER FLAGS
 LDSCRIPT= stm32_flash.ld
 LDFLAGS =-nostdlib -T $(LDSCRIPT) --specs=nosys.specs $(MCFLAGS) -Wl,-Map=bin/app.map
 
 ###
 # Optimizations
-OPT?='O1 O2 O3 O4 O6 O7' # O5 disabled by default, because it breaks code
-
-#ifneq ($(findstring release-memopt,$(MAKECMDGOALS)),)
-ifneq ($(filter O1,$(OPT)),)
-CXXFLAGS+=-fno-exceptions # Uncomment to disable exception handling
-DEFS+=-DNO_EXCEPTIONS # The source code has to comply with this rule
-endif
-
-ifneq ($(filter O2,$(OPT)),)
-CFLAGS+=-O2 # Optimize for size https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html
-CXXFLAGS+=-O2
-LDFLAGS+=-O2 # Optimize for size https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html
-endif
-
-ifneq ($(filter O3,$(OPT)),)
-CFLAGS+=-ffunction-sections -fdata-sections # Place each function or data item into its own section in the output file
-CXXFLAGS+=-ffunction-sections -fdata-sections # -||-
-LDFLAGS+=-Wl,-gc-sections # Remove isolated unused sections
-endif
-
-ifneq ($(filter O4,$(OPT)),)
-CFLAGS+=-fno-builtin # Disable C++ exception handling
-CXXFLAGS+=-fno-builtin # Disable C++ exception handling
-endif
-
-ifneq ($(filter O5,$(OPT)),)
-CFLAGS+=-flto # Enable link time optimization
-CXXFLAGS+=-flto # Enable link time optimization
-LDFLAGS+=-flto # Enable link time optimization
-endif
-
-ifneq ($(filter O6,$(OPT)),)
-CXXFLAGS+=-fno-rtti # Disable type introspection
-endif
-
-ifneq ($(findstring O7,$(OPT)),)
-LDFLAGS+=--specs=nano.specs # Use size optimized newlib
-endif
-#endif
-
+CXXFLAGS+=-fno-exceptions -O2 -ffunction-sections -fdata-sections -fno-builtin -fno-rtti
+CFLAGS+=-O2 -ffunction-sections -fdata-sections -fno-builtin 
+LDFLAGS+=-O2 -Wl,-gc-sections --specs=nano.specs
 ###
 # Build Rules
 .PHONY: all release release-memopt debug clean
@@ -121,6 +87,7 @@ $(BINDIR)/$(BINELF): $(OBJECTS)
 	@ $(CC) $(LDFLAGS) $(OBJECTS) -o $@
 	@echo "Linking complete!"
 	$(SIZE) $(BINDIR)/$(BINELF)
+	#$(READELF) -e $(BINDIR)/$(BINELF)
 
 %.o: %.c
 	@ $(CC) $(CFLAGS) $< -o $@

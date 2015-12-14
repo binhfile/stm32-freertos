@@ -6,6 +6,9 @@
 #include <termios.h>
 #include <semaphore.h>
 #include <mqueue.h>
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <spidev.h>
 #include <drv_gpio.h>
 
@@ -16,6 +19,8 @@
 #include "network/mac/mac_mrf24j40.h"
 
 #include <Test.h>
+#include <Network.h>
+#include <App.h>
 #include <setting.h>
 #include <at93c.h>
 
@@ -31,15 +36,15 @@ void LREP(char* s, ...);
 pthread_t           g_thread[APP_THREAD_COUNT];
 pthread_attr_t      g_thread_attr[APP_THREAD_COUNT];
 sem_t               g_thread_startup[APP_THREAD_COUNT-1];
-sem_t				g_sem_debug;
+sem_t               g_sem_debug;
 mqd_t               g_debug_tx_buffer   = 0;
 int                 g_fd_debug          = -1;
 int                 g_fd_led[4]         = {-1};
 int                 g_fd_button         = -1;
-volatile uint8_t	g_debug_cmd = 0;
+volatile uint8_t    g_debug_cmd = 0;
 
-struct mac_mrf24j40			g_rf_mac;
-struct setting_device		g_setting_dev;
+struct mac_mrf24j40         g_rf_mac;
+struct setting_device       g_setting_dev;
 
 extern int board_register_devices();
 int g_thread_index = 1;
@@ -51,10 +56,10 @@ int g_thread_index = 1;
 }
 
 uint8_t kbhit(int timeout){
-	g_debug_cmd = 0;
+    g_debug_cmd = 0;
     while(g_debug_cmd == 0 && timeout > 0){
-    	usleep(1000* 100);
-    	timeout -= 100;
+        usleep(1000* 100);
+        timeout -= 100;
     }
     return g_debug_cmd;
 }
@@ -62,19 +67,19 @@ uint8_t kb_value(){ return g_debug_cmd;}
 uint8_t is_char(uint8_t val){ return ((val >= 'a' && val <= 'z') || (val >= 'A' && val <= 'Z')); }
 uint8_t is_number(uint8_t val){ return ((val >= '0' && val <= '9')); }
 uint8_t kb_cmd(const char* cmd){
-	uint8_t u8_cmd = 0;
-	LREP("%s? ", cmd); 
-	do{
-		u8_cmd = kbhit(1000);
-		if(u8_cmd == 13){
-			LREP("\r\n");
-			LREP("%s? ", cmd);
-			cmd == 0;
-		}
-		if(!is_char(u8_cmd) && !is_number(u8_cmd)) u8_cmd = 0;
-	}while(u8_cmd == 0);
-	LREP("%c\r\n", u8_cmd);
-	return u8_cmd;
+    uint8_t u8_cmd = 0;
+    LREP("%s? ", cmd); 
+    do{
+        u8_cmd = kbhit(1000);
+        if(u8_cmd == 13){
+            LREP("\r\n");
+            LREP("%s? ", cmd);
+            cmd = 0;
+        }
+        if(!is_char(u8_cmd) && !is_number(u8_cmd)) u8_cmd = 0;
+    }while(u8_cmd == 0);
+    LREP("%c\r\n", u8_cmd);
+    return u8_cmd;
 }
 int main(void)
 {
@@ -105,7 +110,7 @@ int main(void)
 #include <stdarg.h>
 void LREP(char* s, ...){
     char szBuffer[128];
-    int i, len;
+    int len;
     va_list arglist;
     va_start(arglist, s);
     memset(szBuffer, 0, 128);
@@ -115,13 +120,13 @@ void LREP(char* s, ...){
     mq_send(g_debug_tx_buffer, szBuffer, len, 0);
     sem_post(&g_sem_debug);
 }
-struct mac_mrf24j40_open_param	rf_mac_init;
+struct mac_mrf24j40_open_param  rf_mac_init;
 
 void *Thread_Startup(void *pvParameters){
-    int i,j, ret;
+    int i,j;
     struct termios2 opt;
     unsigned int uival;
-	uint8_t userInput;
+    uint8_t userInput;
     struct setting_value setting;
     uint8_t u8aVal[8];
 
@@ -131,12 +136,12 @@ void *Thread_Startup(void *pvParameters){
     board_register_devices();
     // open gpio
     g_fd_led[0] = open("led-green", 0);
-    g_fd_led[1] = open("led-red", 	0);
+    g_fd_led[1] = open("led-red",   0);
     g_fd_led[2] = open("led-blue", 0);
     g_fd_led[3] = open("led-orange", 0);
-    g_fd_button = open("button", 	0);
+    g_fd_button = open("button",    0);
     // open usart
-    g_fd_debug = open("usart-1", O_RDWR);
+    g_fd_debug = open("debug-dev", O_RDWR);
     if(g_fd_debug >= 0){
         // configure
         ioctl(g_fd_debug, TCGETS2, (unsigned int)&opt);
@@ -171,7 +176,7 @@ void *Thread_Startup(void *pvParameters){
         };
     }
     
-    rf_mac_init.fd_spi = open("spi-1", O_RDWR);
+    rf_mac_init.fd_spi = open("rf", O_RDWR);
     if(rf_mac_init.fd_spi < 0){
         LREP("open spi device failed\r\n");
     }
@@ -185,7 +190,7 @@ void *Thread_Startup(void *pvParameters){
             //if(ioctl(rf_mac_init.fd_spi, SPI_IOC_RD_MAX_SPEED_HZ, (unsigned int)&uival) == 0) LREP("ioctl spi speed = %u\r\n", uival);
         }
     }
-    rf_mac_init.fd_cs = open("spi-1-cs", 0);
+    rf_mac_init.fd_cs = open("rf-cs", 0);
     if(rf_mac_init.fd_cs < 0) LREP("open spi cs device failed\r\n");
     rf_mac_init.fd_reset = open("rf-reset", 0);
     if(rf_mac_init.fd_reset < 0) LREP("open rf-reset device failed\r\n");
@@ -197,12 +202,12 @@ void *Thread_Startup(void *pvParameters){
     g_setting_dev.dev.fd_mosi = open("at93c-mosi", 0);
     g_setting_dev.dev.fd_miso = open("at93c-miso", 0);
     if(g_setting_dev.dev.fd_cs < 0 ||
-    		g_setting_dev.dev.fd_sck < 0 ||
-			g_setting_dev.dev.fd_mosi < 0 ||
-			g_setting_dev.dev.fd_miso < 0){
-    	LREP("open at93c failed cs:%d sck:%d mosi:%d miso:%d\r\n",
-    			g_setting_dev.dev.fd_cs, g_setting_dev.dev.fd_sck,
-				g_setting_dev.dev.fd_mosi, g_setting_dev.dev.fd_miso);
+            g_setting_dev.dev.fd_sck < 0 ||
+            g_setting_dev.dev.fd_mosi < 0 ||
+            g_setting_dev.dev.fd_miso < 0){
+        LREP("open at93c failed cs:%d sck:%d mosi:%d miso:%d\r\n",
+                g_setting_dev.dev.fd_cs, g_setting_dev.dev.fd_sck,
+                g_setting_dev.dev.fd_mosi, g_setting_dev.dev.fd_miso);
     }
     // Miwi network
     MAC_mrf24j40_open(&g_rf_mac, &rf_mac_init);
@@ -211,78 +216,80 @@ void *Thread_Startup(void *pvParameters){
     for(i = 0; i < APP_THREAD_COUNT-1; i++){
         sem_post(&g_thread_startup[i]);
     }
+    srand(0);
     usleep(1000* 100);
 
 MAIN_MENU:
-	LREP("------- Main menu ------\r\n");
+    LREP("------- Main menu ------\r\n");
     LREP("1. Test\r\n");
     LREP("2. Setting\r\n");
-	LREP("cmd? ");
-	i = 3;
-	do{
-		userInput = kbhit(1000);
-		if(userInput == 13){
-			LREP("\r\n");
-			LREP("%s? ", userInput);
-			userInput = 0;
-		}
-		if(!is_char(userInput) && !is_number(userInput)) userInput = 0;
-		LREP(".");
-		i--;
-	}while(userInput == 0 && i > 0);
-	LREP("%c\r\n", userInput);
+    LREP("cmd? ");
+    i = 3;
+    do{
+        userInput = kbhit(1000);
+        if(userInput == 13){
+            LREP("\r\n");
+            LREP("%s? ", userInput);
+            userInput = 0;
+        }
+        if(!is_char(userInput) && !is_number(userInput)) userInput = 0;
+        LREP(".");
+        i--;
+    }while(userInput == 0 && i > 0);
+    LREP("%c\r\n", userInput);
     switch(userInput){
-    	case '1':{
-    		Test_menu();
-    		goto MAIN_MENU;
-    		break;
-    	}
-    	case '2':{
-    		setting_menu();
-    		goto MAIN_MENU;
-    		break;
-    	}
+        case '1':{
+            Test_menu();
+            goto MAIN_MENU;
+            break;
+        }
+        case '2':{
+            setting_menu();
+            goto MAIN_MENU;
+            break;
+        }
     }
     LREP("\r\nGoto main app\r\n");
     setting_read(&g_setting_dev, &setting);
-    setting_dump_to_stdio(&g_setting_dev);
+    LREP("Setting:\r\n");
+    setting_dump_to_stdio(&setting);
     uival = 25;
     MAC_mrf24j40_ioctl(&g_rf_mac, mac_mrf24j40_ioc_set_channel, (unsigned int)&uival);
     for(i = 0; i < 8 ; i++)
-    	u8aVal[i] = setting.mac_long_address[i];
+        u8aVal[i] = setting.mac_long_address[i];
     MAC_mrf24j40_ioctl(&g_rf_mac, mac_mrf24j40_ioc_set_long_address, (unsigned int)u8aVal);
     if(setting.network_type == setting_network_type_pan_coordinator){
-    	uint8_t noise_level[15];
-    	uint8_t channels[15];
-    	LREP("Device as PAN coordinator\r\n");
-    	LREP("Scan free channel\r\n");
-    	for(i =0 ;i < 15; i++) channels[i] = i + 11;
-    	Network_scan_channel(&g_rf_mac, 0x03fff800, noise_level);
-    	// sort noise level
-    	for(i = 0; i < 15-1; i++){
-    		for(j = i+1; j < 15; j++){
-    			if(noise_level[i] > noise_level[j]){
-    				noise_level[i] ^= noise_level[j];
-    				noise_level[j] ^= noise_level[i];
-    				noise_level[i] ^= noise_level[j];
+        uint8_t noise_level[15];
+        uint8_t channels[15];
+        LREP("Device as PAN coordinator\r\n");
+        LREP("Scan free channel\r\n");
+        for(i =0 ;i < 15; i++) channels[i] = i + 11;
+        Network_scan_channel(&g_rf_mac, 0x03fff800, noise_level);
+        // sort noise level
+        for(i = 0; i < 15-1; i++){
+            for(j = i+1; j < 15; j++){
+                if(noise_level[i] > noise_level[j]){
+                    noise_level[i] ^= noise_level[j];
+                    noise_level[j] ^= noise_level[i];
+                    noise_level[i] ^= noise_level[j];
 
-    				channels[i] ^= channels[j];
-    				channels[j] ^= channels[i];
-    				channels[i] ^= channels[j];
-    			}
-    		}
-    	}
-    	for(i = 0; i < 15; i++){
-    		LREP("Detect network on channel %d ...", channels[i]);
-    		LREP("not found\r\n");
-    		break;
-    	}
-    	if(i == 15) LREP("Not found free channel\r\n");
-    	else{
-    		LREP("Select free channel: %d\r\n", channels[i]);
-    	}
+                    channels[i] ^= channels[j];
+                    channels[j] ^= channels[i];
+                    channels[i] ^= channels[j];
+                }
+            }
+        }
+        for(i = 0; i < 15; i++){
+            LREP("Detect network on channel %d ...", channels[i]);
+            LREP("not found\r\n");
+            break;
+        }
+        if(i == 15) LREP("Not found free channel\r\n");
+        else{
+            LREP("Select free channel: %d\r\n", channels[i]);
+        }
     }
-
+    App_Initialize();
     while(1){sleep(1);}
     return 0;
 }
@@ -292,35 +299,30 @@ void *Thread_DebugTX(void* pvParameters){
     abs_timeout.tv_sec = 1;
     abs_timeout.tv_nsec = 0;
     while(1){
-        if(mq_timedreceive(g_debug_tx_buffer, &data, 1, 0, &abs_timeout) == 1)
+        if(mq_timedreceive(g_debug_tx_buffer, (char*)&data, 1, 0, &abs_timeout) == 1)
             write(g_fd_debug, &data, 1);
-        //else
-        	//portYIELD();
     }
 }
 void *Thread_RFIntr(void *pvParameters){
-    int8_t buffer[16];
-    int len, i;
+    int len;
     sem_t* sem_startup = (sem_t*)pvParameters;
     fd_set readfs;
     struct timeval timeout;
-    uint8_t led_state = 0;
     
     sem_wait(sem_startup);
     //LREP("Thread RFIntr is running\r\n");
     
     FD_CLR(rf_mac_init.fd_intr, &readfs);
-    timeout.tv_sec     = 0;
-    timeout.tv_usec = 1000*500;    // 500ms
+    timeout.tv_sec      = 1;
+    timeout.tv_usec     = 0;
 
     while (1) {        
         len = select(rf_mac_init.fd_intr, (unsigned int*)&readfs, 0, 0, &timeout);
         if(len > 0){
             if(FD_ISSET(rf_mac_init.fd_intr, &readfs)){
-            	MAC_mrf24j40_ioctl(&g_rf_mac, mac_mrf24j40_ioc_trigger_interrupt, 0);
+                MAC_mrf24j40_ioctl(&g_rf_mac, mac_mrf24j40_ioc_trigger_interrupt, 0);
             }
         }else if(len == 0){
-        	//portYIELD();
         }else{
             LREP("select intr pin failed.\r\n");
             break;
@@ -330,15 +332,14 @@ void *Thread_RFIntr(void *pvParameters){
 }
 void *Thread_DebugRx(void *pvParameters){
     int8_t u8val;
-    int8_t userinput[33];
-    int len, userinput_index = 0;
+    int len;
     sem_t* sem_startup = (sem_t*)pvParameters;
     fd_set readfs;
     struct timeval timeout;
 
     FD_CLR(g_fd_debug, &readfs);
-    timeout.tv_sec  = 0;
-    timeout.tv_usec = 1000*100;    // 500ms
+    timeout.tv_sec  = 1;
+    timeout.tv_usec = 0;
 
     sem_wait(sem_startup);
     //LREP("Thread DebugRx is running\r\n");
@@ -348,13 +349,11 @@ void *Thread_DebugRx(void *pvParameters){
             if(FD_ISSET(g_fd_debug, &readfs)){
                 len = read(g_fd_debug, &u8val, 1);
                 if(len > 0){
-                    //LREP("%c", u8val);
                     g_debug_cmd = u8val;
                     if(u8val == 'r') reboot();
                 }
             }
         }else if(len == 0){
-        	//portYIELD();
         }
         else{
             LREP("select uart failed %d.\r\n", len);
@@ -366,16 +365,14 @@ void *Thread_DebugRx(void *pvParameters){
 
 void *Thread_MiwiTask(void* pvParameters){
     sem_t* sem_startup = (sem_t*)pvParameters;
-    unsigned int uival;
 
     sem_wait(sem_startup);
-
     //LREP("Thread MiwiTask is running\r\n");
     while(1){
-    	if(MAC_mrf24j40_select(&g_rf_mac, 100)){
-    		MAC_mrf24j40_task(&g_rf_mac);
-    	}
-    	LED_TOGGLE(ORANGE);
+        if(MAC_mrf24j40_select(&g_rf_mac, 100)){
+            MAC_mrf24j40_task(&g_rf_mac);
+        }
+        LED_TOGGLE(ORANGE);
     }
     return 0;
 }

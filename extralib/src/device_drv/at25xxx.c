@@ -6,9 +6,10 @@
 int at25_init(struct at25_device* dev){
 	dev->fd_spi = 0;
 	dev->fd_cs  = 0;
+	return 0;
 }
 int at25_destroy(struct at25_device* dev){
-
+	return 0;
 }
 int at25_read_status(struct at25_device* dev, struct at25_reg_status* status){
 	int ret = 0;
@@ -155,16 +156,13 @@ int at25_write(struct at25_device* dev, unsigned int address, const void* payloa
 	}
 	return ret;
 }
-int at25_read(struct at25_device* dev, unsigned int address, const void* payload, int max_length){
-	int ret = 0, i;
+int at25_read(struct at25_device* dev, unsigned int address, void* payload, int max_length){
+	int ret;
 	uint8_t u8val;
 	struct 	spi_ioc_transfer tr;
-	struct at25_reg_status reg_status;
 	uint8_t txBuf[32+3], rxBuf[32+3];
-	uint8_t timeout;
 
 	if(max_length <= 0) return 0;
-	timeout = 100;
 	
 	// read status
 	//at25_read_status(dev, &reg_status);

@@ -17,7 +17,6 @@
 #define PHY_SET_REG_VERIFY	0
 
 uint8_t PHY_mrf24j40_getLongRAMAddr	(struct phy_mrf24j40* phy,uint16_t address){
-	uint8_t ret = 0;
 	uint8_t u8tx[3], u8rx[3];
 	struct spi_ioc_transfer xfer;
 
@@ -38,7 +37,6 @@ uint8_t PHY_mrf24j40_getLongRAMAddr	(struct phy_mrf24j40* phy,uint16_t address){
 	return u8rx[2];
 }
 uint8_t PHY_mrf24j40_getShortRAMAddr(struct phy_mrf24j40* phy,uint8_t address){
-	uint8_t ret = 0;
 	uint8_t u8tx[2], u8rx[2];
 	struct spi_ioc_transfer xfer;
 
@@ -479,13 +477,13 @@ int 	MAC_mrf24j40_write(struct mac_mrf24j40* mac, struct mac_mrf24j40_write_para
 	__mac_mrf24j40_unlock(mac);
 	flag_event_post(&mac->event);
 
-	return 0;
+	return ret;
 }
 int 	__mac_mrf24j40_write(struct mac_mrf24j40* mac, struct mac_mrf24j40_write_param* trans,
 		void* payload, int payloadlen){
 	int ret = -1, i;
 	uint8_t hdr_len;
-	uint16_t ram_addr, ram_addr_tmp;
+	uint16_t ram_addr;
 	struct mac_ieee802154_frm_ctrl frmCtrl;
 	uint8_t *p;
 	/*
@@ -653,7 +651,7 @@ int		MAC_mrf24j40_ioctl(struct mac_mrf24j40* mac, int request, unsigned int argu
 }
 int 	MAC_mrf24j40_task(struct mac_mrf24j40* mac){
 	int ret = -1, i;
-	uint8_t u8val, u8len;
+	uint8_t u8len;
 	PHY_MRF24J40_IFREG	flags;
 	uint8_t rxBuf[144];
 	struct mac_mrf24j40_write_item* item = 0;
@@ -663,7 +661,7 @@ int 	MAC_mrf24j40_task(struct mac_mrf24j40* mac){
 	flags.Val = PHY_mrf24j40_getShortRAMAddr(&mac->phy, PHY_MRF24J40_READ_ISRSTS);
 	if(flags.bits.RF_TXIF){
 		mac->flags |= ((uint8_t)1 << MAC_MRF24J40_FLAG_TX_DONE);	// set bit tx done
-		u8val = PHY_mrf24j40_getShortRAMAddr(&mac->phy, PHY_MRF24J40_READ_TXSR);
+		PHY_mrf24j40_getShortRAMAddr(&mac->phy, PHY_MRF24J40_READ_TXSR);
 	}
 	if(flags.bits.RF_RXIF){
 		/* |frame_len(n+m+2)|header(m)|data(n)|FCS(2)|LQI(1)|RSSI(1)|

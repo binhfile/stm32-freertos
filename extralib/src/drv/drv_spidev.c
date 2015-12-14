@@ -12,6 +12,7 @@ SPI6 	PG14 	PG12 	PG13 													2
 #include <drv_api.h>
 #include <drv_gpio.h>
 #include <spidev.h>
+#include <string.h>
 
 #include "stm32f4xx.h"
 #include "stm32f4xx_gpio.h"
@@ -85,7 +86,6 @@ unsigned int spi_drv_find_speed_from_scale(int scale, int prescaler){
 	return ret;
 }
 int spi_init		(void){
-	int i;
 	memset(&g_spi_driver_arch_data, 0, sizeof(g_spi_driver_arch_data));
 	g_spi_driver_arch_data.speed_supported[0].scale = SPI_BaudRatePrescaler_2;
 	g_spi_driver_arch_data.speed_supported[0].speed = SystemCoreClock / 2;
@@ -113,11 +113,11 @@ int 	spi_open	(struct platform_device *dev, int flags){
 	int ret;
 	struct spi_platform_data* data;	
 	GPIO_InitTypeDef 	GPIO_InitStruct;
-	NVIC_InitTypeDef 	NVIC_InitStructure;
-	SPI_TypeDef* 		SPIx;
+//	NVIC_InitTypeDef 	NVIC_InitStructure;
+	SPI_TypeDef* 		SPIx = 0;
 	int bank, pin;
-	uint8_t GPIO_AF;	
-	uint8_t NVIC_IRQChannel;
+	uint8_t GPIO_AF = GPIO_AF_SPI1;
+//	uint8_t NVIC_IRQChannel;
 	
 	ret = -EPERM;
 	data = (struct spi_platform_data*)dev->dev.platform_data;
@@ -128,28 +128,28 @@ int 	spi_open	(struct platform_device *dev, int flags){
 		case 0:{
 			GPIO_AF = GPIO_AF_SPI1;
 			SPIx = SPI1;
-			NVIC_IRQChannel = SPI1_IRQn;
+//			NVIC_IRQChannel = SPI1_IRQn;
 			RCC_APB2PeriphClockCmd(RCC_APB2Periph_SPI1, ENABLE);
 			break;
 		}
 		case 1:{
 			GPIO_AF = GPIO_AF_SPI2;
 			SPIx = SPI2;
-			NVIC_IRQChannel = SPI2_IRQn;
+//			NVIC_IRQChannel = SPI2_IRQn;
 			RCC_APB1PeriphClockCmd(RCC_APB1Periph_SPI2, ENABLE);
 			break;
 		}
 		case 2:{
 			GPIO_AF = GPIO_AF_SPI3;
 			SPIx = SPI3;
-			NVIC_IRQChannel = SPI3_IRQn;
+//			NVIC_IRQChannel = SPI3_IRQn;
 			RCC_APB1PeriphClockCmd(RCC_APB1Periph_SPI3, ENABLE);
 			break;
 		}
 		default:
 			break;
 	}
-	
+	if(SPIx == 0) return -1;
 	// GPIO pin
 	if(data->sck_pin != GPIO_PIN_INVALID){
 		bank = gpio_get_bank_index(data->sck_pin);
@@ -242,7 +242,6 @@ int		spi_ioctl	(struct platform_device *dev, int request, unsigned int arguments
 	unsigned char *tx, *rx, u8val;
 	unsigned int  len;
 	unsigned int ival;
-	uint16_t sr;
 	uint16_t scale_index;
 	
 	ret = -EPERM;
@@ -250,7 +249,6 @@ int		spi_ioctl	(struct platform_device *dev, int request, unsigned int arguments
 	SPIx = (SPI_TypeDef*)data->__drv_base;
 	
 	if(dev->id < 0 || dev->id > SPI_MODULE_COUNT) {
-		LREP("invalid dev id %d max %d\r\n", dev->id, SPI_MODULE_COUNT);
 		return ret;
 	}
 	

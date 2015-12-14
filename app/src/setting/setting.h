@@ -27,5 +27,5 @@ void setting_menu();
 int setting_read(struct setting_device* dev, struct setting_value *val);
 int setting_write(struct setting_device* dev, struct setting_value* val);
 
-void setting_dump_to_stdio(struct setting_device *setting);
+void setting_dump_to_stdio(struct setting_value *val);
 #endif /* SRC_SETUP_SETUP_H_ */

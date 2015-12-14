@@ -13,6 +13,7 @@
 #include <Network.h>
 #include <setting.h>
 #include <string.h>
+#include <fcntl.h>
 #define TEST_LEN	(90)
 
 extern struct mac_mrf24j40	g_rf_mac;
@@ -64,7 +65,7 @@ void MAC_test(){
 }
 void MAC_test_loop_received_packets(){
 	uint8_t rxBuf[TEST_LEN];
-	int i, len, payload_cnt = 0, packet_done_cnt = 0;
+	int i, len;
 	unsigned int uival;
 	struct mac_mrf24j40_write_param write_param;
 	struct mac_mrf24j40_read_param read_param;
@@ -195,9 +196,9 @@ void Network_test(){
 		default: break;
 	}
 }
-void Setting__test_erase_and_write(){
+void Setting_test_erase_and_write(){
 	uint8_t buf[AT93C66_SIZE], wBuf[AT93C66_SIZE];
-	int len, i;
+	int i;
 	LREP("Erase eeprom ...");
 	at93c_ioctl(&g_setting_dev.dev, at93c_ioc_erase_all, 0);
 	at93c_read(&g_setting_dev.dev, 0, buf, AT93C66_SIZE);
@@ -231,7 +232,7 @@ void Setting_test(){
 		switch(input){
 			case 'q': break;
 			case '1':{
-				Setting__test_erase_and_write();
+				Setting_test_erase_and_write();
 				break;
 			}
 		}

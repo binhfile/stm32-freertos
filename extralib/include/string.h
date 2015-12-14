@@ -13,8 +13,11 @@ extern "C" {
 #endif
 int     strncmp(const char *s1, const char *s2, size_t count);
 char *	strncpy(char *dest, const char *src, size_t count);
+int 	strcmp(const char *p1_str, const char *p2_str);
 size_t  strlen(const char *s);
+
 void *	memset(void *s, int val, size_t count);
+void    memcpy(void *pdest, const void *psrc, size_t size);
 #ifdef	__cplusplus
 }
 #endif
