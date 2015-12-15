@@ -123,6 +123,10 @@ SECTIONS
      ___dev_lookup_begin = .;
      KEEP (*(.dev_lookup))
      ___dev_lookup_end = .;
+     
+     ___cli_app_begin = .;
+     KEEP (*(.cli_app))
+     ___cli_app_end = .;     
 
     . = ALIGN(4);
     _edata = .;        /* define a global symbol at data end */

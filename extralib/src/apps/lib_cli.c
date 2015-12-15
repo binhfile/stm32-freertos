@@ -53,10 +53,7 @@ int lib_cli_set_banner(struct lib_cli *inst, const char* banner){
 	return ret;
 }
 inline uint8_t lib_cli_is_char_valid(uint8_t val){
-	return ((val >= 'a' && val <= 'z') ||
-			(val >= 'A' && val <= 'Z') ||
-			(val >= '0' && val <= '9') ||
-			(val == ' ' || val == '?' || val == '-') || (val == ':'));
+	return (val >= 32 && val <= 126);
 }
 inline uint8_t lib_cli_is_space(uint8_t val){
 	return ((val == ' '));
@@ -65,8 +62,7 @@ inline uint8_t lib_cli_is_space(uint8_t val){
 #define lib_cli_write(x)	LREP("%s", x)
 
 #define CLI_MAX_ARGV		5
-#define CLI_ARGV_MAX_LEN	25
-#define CLI_BUF_MAX_LEN		(CLI_MAX_ARGV*CLI_ARGV_MAX_LEN+CLI_MAX_ARGV)
+#define CLI_BUF_MAX_LEN		64
 int lib_cli_loop(struct lib_cli *inst, int timeout){
 	int ret = 0;
 	int len, i;
@@ -74,21 +70,16 @@ int lib_cli_loop(struct lib_cli *inst, int timeout){
     struct timeval s_timeout;
     uint8_t buff[32];
     uint8_t prompt[32];
-    uint8_t buff_process[CLI_BUF_MAX_LEN];
+    uint8_t buff_process[CLI_BUF_MAX_LEN+1];
     int argc_index;
-    char argv_buff[CLI_MAX_ARGV][CLI_ARGV_MAX_LEN+1];
     char *argv[CLI_MAX_ARGV];
     int buff_index;
-    int argv_index;
     int argc_cnt;
     int full;
 
     FD_CLR(inst->fd_read, &readfs);
     s_timeout.tv_sec  = 1;
     s_timeout.tv_usec = 0;
-    for(i = 0; i < CLI_MAX_ARGV; i++){
-    	argv[i] = &argv_buff[i][0];
-    }
 
     lib_cli_write(inst->banner);
     snprintf((char*)prompt, 31, "%s%c ", inst->hostname, inst->prompt);
@@ -108,20 +99,23 @@ int lib_cli_loop(struct lib_cli *inst, int timeout){
 							// enter
 							argc_cnt = 0;
 							if(buff_index > 0){
+								buff_process[buff_index] = '\0';
 								argc_index = 0;
-								argv_index = 0;
 								full = 0;
 								i = 0;
-								memset(argv_buff, 0, CLI_MAX_ARGV*(CLI_ARGV_MAX_LEN+1));
-								// ignore space
+								// ignore first space
 								while(i < buff_index){
 									if(lib_cli_is_space(buff_process[i]) == 0) break;
 									i++;
 								}
-								if(i < buff_index) argc_cnt = 1;
+								if(i < buff_index){
+									argv[0] = (char*)&buff_process[i];
+									argc_cnt = 1;
+								}
 								while(i < buff_index){
 									if(full) break;
 									if(lib_cli_is_space(buff_process[i])){
+										buff_process[i] = '\0';
 										if(argc_index == CLI_MAX_ARGV-1) {
 											full = 1;
 											break;
@@ -131,19 +125,12 @@ int lib_cli_loop(struct lib_cli *inst, int timeout){
 												!lib_cli_is_space(buff_process[i+1]) &&
 												argc_index < CLI_MAX_ARGV-1){
 											argc_index++;
-											argv_index = 0;
+											argv[argc_cnt] = (char*)&buff_process[i+1];
 											argc_cnt++;
-										}
-									}else{
-										if(argv_index < CLI_ARGV_MAX_LEN){
-											argv_buff[argc_index][argv_index] = buff_process[i];
-											argv_index++;
-											if(argc_index == CLI_MAX_ARGV-1 && argv_index == CLI_ARGV_MAX_LEN-1)
-												full = 1;
 										}
 									}
 									i++;
-								}
+								}// end while
 							}
 							if(argc_cnt > 0){
 								if(inst->cb_fxn){
