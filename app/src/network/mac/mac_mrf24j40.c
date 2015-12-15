@@ -132,7 +132,7 @@ void PHY_mrf24j40_softreset(struct phy_mrf24j40* phy){
         timeout-=10;
     } while (((i & 0x07) != (uint8_t) 0x00) && (timeout > 0));
     usleep(1000 * 100);
-    if(timeout == 0) LREP_WARN("timeout\r\n");
+    //if(timeout == 0) LREP_WARN("timeout\r\n");
 }
 int PHY_mrf24j40_setChannel(struct phy_mrf24j40* phy, uint8_t channel)
 {
@@ -257,7 +257,7 @@ void PHY_mrf24j40_initialize(struct phy_mrf24j40* phy){
 		timeout--;
 	}
 	while (((i&0xA0) != 0xA0) && (timeout > 0));
-	if(timeout == 0) LREP_WARN("timeout\r\n");
+	//if(timeout == 0) LREP_WARN("timeout\r\n");
 
 	PHY_mrf24j40_setShortRAMAddr(phy, PHY_MRF24J40_WRITE_INTMSK, 0xE6);
 
@@ -696,7 +696,7 @@ int 	MAC_mrf24j40_task(struct mac_mrf24j40* mac){
 	}
 	if(flags.bits.SECIF){
 		PHY_mrf24j40_setShortRAMAddr(&mac->phy, PHY_MRF24J40_WRITE_SECCR0, 0x80);
-		LREP("\r\nSECIF\r\n");
+		//LREP("\r\nSECIF\r\n");
 	}
 	// tx pennding items
 	if(mac->flags & ((uint8_t)1 << MAC_MRF24J40_FLAG_TX_DONE)){	// if tx done

@@ -165,7 +165,7 @@
  */
 
  #define 		HAVE_VSNPRINTF	0
- #define 		HAVE_SNPRINTF	1
+ #define 		HAVE_SNPRINTF	0
  #define    	HAVE_VASPRINTF	1
  #define    	HAVE_ASPRINTF	1
  #define   		HAVE_STDARG_H	1
@@ -1526,7 +1526,7 @@ rpl_vasprintf(char **ret, const char *format, va_list ap)
 #if !HAVE_SNPRINTF
 #if HAVE_STDARG_H
 int
-rpl_snprintf(char *str, size_t size, const char *format, ...)
+snprintf(char *str, size_t size, const char *format, ...)
 #else
 int
 rpl_snprintf(va_alist) va_dcl

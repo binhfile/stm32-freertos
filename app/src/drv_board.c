@@ -199,6 +199,15 @@ struct platform_device g_random_device = {
 	.id 		= 0,
 	.next 		= 0,
 };
+struct platform_device g_rtc_device = {
+	.dev_name 	= "rtc0",
+	.name     	= "rtc-drv",
+	.dev 		= {
+		.platform_data = 0,
+	},
+	.id 		= 0,
+	.next 		= 0,
+};
 
 device_init(g_usart_debug_device);
 
@@ -218,6 +227,7 @@ device_init(g_gpio_at93c_miso_device);
 
 device_init(g_rf_device);
 device_init(g_random_device);
+device_init(g_rtc_device);
 
 int board_register_devices(){
 	platform_device_register(&g_usart_debug_device);
@@ -238,6 +248,7 @@ int board_register_devices(){
 
 	platform_device_register(&g_rf_device);
 	platform_device_register(&g_random_device);
+	platform_device_register(&g_rtc_device);
 	return 0;
 }
 //end of file

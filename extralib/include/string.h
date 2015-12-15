@@ -21,6 +21,7 @@ void *	memset(void *s, int val, size_t count);
 void    memcpy(void *pdest, const void *psrc, size_t size);
 
 int vsnprintf(char *str, size_t size, const char *format, va_list args);
+int snprintf(char *str, size_t size, const char *format, ...);
 #ifdef	__cplusplus
 }
 #endif

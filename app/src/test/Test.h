@@ -7,8 +7,7 @@
 
 #ifndef SRC_TEST_H_
 #define SRC_TEST_H_
-void Test_menu();
-void MAC_test();
-void Network_test();
+void MAC_test_loop_received_packets();
+void MAC_test_send_and_check_packets();
 
 #endif /* SRC_TEST_H_ */
