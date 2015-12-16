@@ -33,12 +33,12 @@ struct __attribute__((packed)) mac_mrf24j40_write_param {
             uint8_t secEn       : 1;
             uint8_t repeat      : 1;// allow repeaters to forward the msg
             uint8_t ackReq      : 1;
-            uint8_t destPrsnt   : 1;// dest address in the msg
+            uint8_t intraPAN    : 1;// dest address in the msg
             uint8_t sourcePrsnt : 1;// src address in the msg
         }bits;
     }flags;
-    uint8_t  altDestAddr;   // alternative network adress as destination
-    uint8_t  altSrcAddr;    // alternative network adress as source
+    uint8_t srcAddressMode;
+    uint8_t destAddressMode;
 };
 struct __attribute__((packed)) phy_mrf24j40{
     int fd_spi;

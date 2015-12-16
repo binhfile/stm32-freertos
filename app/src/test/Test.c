@@ -30,12 +30,14 @@ void MAC_test_loop_received_packets(){
 	write_param.flags.bits.packetType 	= MAC_MRF24J40_PACKET_TYPE_DATA;
 	write_param.flags.bits.broadcast	= 1;
 	write_param.flags.bits.ackReq		= 0;
-	write_param.flags.bits.destPrsnt	= 1;
 	write_param.flags.bits.sourcePrsnt	= 0;
 	write_param.flags.bits.repeat		= 0;
 	write_param.flags.bits.secEn		= 0;
+	write_param.flags.bits.intraPAN		= 1;
 	write_param.destPANId 				= 0xffff;
 	write_param.destAddress 			= 0xffff;
+	write_param.srcAddressMode			= mac_iee802154_addrmode_16bit;
+	write_param.destAddressMode			= mac_iee802154_addrmode_16bit;
 
 	setting_read(&g_setting_dev, &setting);
 	uival = 25;
@@ -71,12 +73,14 @@ void MAC_test_send_and_check_packets(){
 	write_param.flags.bits.packetType 	= MAC_MRF24J40_PACKET_TYPE_DATA;
 	write_param.flags.bits.broadcast	= 1;
 	write_param.flags.bits.ackReq		= 0;
-	write_param.flags.bits.destPrsnt	= 1;
 	write_param.flags.bits.sourcePrsnt	= 0;
 	write_param.flags.bits.repeat		= 0;
 	write_param.flags.bits.secEn		= 0;
+	write_param.flags.bits.intraPAN		= 1;
 	write_param.destPANId 				= 0xFFFF;
 	write_param.destAddress 			= 0xFFFFFFFFFFFFFFFF;
+	write_param.srcAddressMode			= mac_iee802154_addrmode_16bit;
+	write_param.destAddressMode			= mac_iee802154_addrmode_16bit;
 
 	setting_read(&g_setting_dev, &setting);
 	uival = 25;

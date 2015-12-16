@@ -501,14 +501,15 @@ int 	__mac_mrf24j40_write(struct mac_mrf24j40* mac, struct mac_mrf24j40_write_pa
 		frmCtrl.bits.frmType = mac_iee802154_frmtype_cmd;
 	// inner PAN
 	hdr_len = 2+1+2;// frmCrl(2)+seq(1)+destPANId(2)
-	frmCtrl.bits.intraPAN = 1;
+	frmCtrl.bits.intraPAN = trans->flags.bits.intraPAN;
 	//altDestAddr = 1
 	//altSrcAddr = 1
 	// ACK req
 	if(trans->flags.bits.ackReq && (trans->flags.bits.broadcast == 0))
 		frmCtrl.bits.ackReq = 1;
-	frmCtrl.bits.destAddrMode = mac_iee802154_addrmode_16bit;
-	frmCtrl.bits.srcAddrMode = mac_iee802154_addrmode_64bit;
+
+	frmCtrl.bits.destAddrMode = trans->destAddressMode;
+	frmCtrl.bits.srcAddrMode = trans->srcAddressMode;
 
 	if(frmCtrl.bits.destAddrMode == mac_iee802154_addrmode_16bit) hdr_len+=2;
 	else hdr_len +=8;

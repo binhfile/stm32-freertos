@@ -26,15 +26,17 @@
 
 void *Thread_Startup(void*);
 void *Thread_DebugTX(void*);
+void *Thread_DebugRX(void*);
 void *Thread_RFIntr(void*);
 void *Thread_MiwiTask(void*);
 void HW_Initalize();
 
-#define             APP_THREAD_COUNT    4
+#define             APP_THREAD_COUNT    	5
 pthread_t           g_thread[APP_THREAD_COUNT];
 pthread_attr_t      g_thread_attr[APP_THREAD_COUNT];
 sem_t               g_thread_startup[APP_THREAD_COUNT-1];
 sem_t               g_sem_debug;
+sem_t				g_sem_debug_rx;
 mqd_t               g_debug_tx_buffer   = 0;
 int                 g_fd_debug          = -1;
 int                 g_fd_led[4]         = {-1};
@@ -42,6 +44,7 @@ int                 g_fd_button         = -1;
 int					g_fd_rtc			= -1;
 
 struct mac_mrf24j40         g_rf_mac;
+struct network				g_nwk;
 struct setting_device       g_setting_dev;
 
 extern int board_register_devices();
@@ -91,6 +94,7 @@ int main(void)
     for(i = 0; i < APP_THREAD_COUNT-1; i++)
         sem_init(&g_thread_startup[i], 0, 0);
     sem_init(&g_sem_debug, 0, 1);
+    sem_init(&g_sem_debug_rx, 0, 0);
 //    sem_init(&g_mimac_access, 0, 1);
     pthread_attr_setstacksize(&g_thread_attr[0], configMINIMAL_STACK_SIZE*32);
     pthread_setschedprio(&g_thread[0], tskIDLE_PRIORITY + 1UL);
@@ -99,6 +103,7 @@ int main(void)
     DEFINE_THREAD(Thread_DebugTX, configMINIMAL_STACK_SIZE*8,  tskIDLE_PRIORITY + 1UL);
     DEFINE_THREAD(Thread_RFIntr,  configMINIMAL_STACK_SIZE*16, tskIDLE_PRIORITY + 3UL);
     DEFINE_THREAD(Thread_MiwiTask,configMINIMAL_STACK_SIZE*32, tskIDLE_PRIORITY + 4UL);
+    DEFINE_THREAD(Thread_DebugRX, configMINIMAL_STACK_SIZE*8,  tskIDLE_PRIORITY + 1UL);
     
     /* Start the RTOS Scheduler */
     vTaskStartScheduler();
@@ -107,14 +112,12 @@ int main(void)
     while(1);
 }
 struct mac_mrf24j40_open_param  rf_mac_init;
-extern void*		___dev_lookup_end;
 void *Thread_Startup(void *pvParameters){
-    int i,j;
+    int i,j, ival;
     struct termios2 opt;
     unsigned int uival;
     struct setting_value setting;
-    uint8_t u8aVal[8];
-
+    uint8_t u8aVal[32];
     
     // register drivers & devices
     driver_probe();
@@ -194,16 +197,19 @@ void *Thread_Startup(void *pvParameters){
     }
     g_fd_rtc = open("rtc0", 0);
     if(g_fd_rtc < 0) LREP("open rtc failed.\r\n");
+
+    g_nwk.mac = &g_rf_mac;
     // Miwi network
     MAC_mrf24j40_open(&g_rf_mac, &rf_mac_init);
+    srand(0);
+
     // signal all other thread startup
     //LREP("Thread startup is running\r\n");
     for(i = 0; i < APP_THREAD_COUNT-1; i++){
         sem_post(&g_thread_startup[i]);
     }
-    srand(0);
     usleep(1000* 100);
-    LREP("\r\nHit any key to break boot sequence ");
+    LREP("\r\nHit any key to break boot sequence");
     uint8_t timeout = 5;
     uint8_t input = 0;
     while(timeout-- && input == 0){
@@ -223,10 +229,14 @@ void *Thread_Startup(void *pvParameters){
     for(i = 0; i < 8 ; i++)
         u8aVal[i] = setting.mac_long_address[i];
     MAC_mrf24j40_ioctl(&g_rf_mac, mac_mrf24j40_ioc_set_long_address, (unsigned int)u8aVal);
+
+    // PAN Coordinator
     if(setting.network_type == setting_network_type_pan_coordinator){
         uint8_t noise_level[15];
         uint8_t channels[15];
-        LREP("Device as PAN coordinator\r\n");
+        struct network_info nwk_info[1];
+
+        LREP("Device as a PAN coordinator\r\n");
         LREP("Scan free channel\r\n");
         for(i =0 ;i < 15; i++) channels[i] = i + 11;
         Network_scan_channel(&g_rf_mac, 0x03fff800, noise_level);
@@ -246,17 +256,49 @@ void *Thread_Startup(void *pvParameters){
         }
         for(i = 0; i < 15; i++){
             LREP("Detect network on channel %d ...", channels[i]);
-            LREP("not found\r\n");
-            break;
+            ival = Network_detect_current_network(&g_nwk, channels[i], nwk_info, 1);
+            if(ival > 0) LREP("found network panId %04X\r\n", nwk_info[0].panId);
+            else {
+            	LREP("not found\r\n");
+            	break;
+            }
         }
         if(i == 15) LREP("Not found free channel\r\n");
         else{
-            LREP("Select free channel: %d\r\n", channels[i]);
+            uival = rand();
+            u8aVal[0] = uival & 0x00FF;
+            u8aVal[1] = ((uival & 0xFF00) >> 8);
+            uival = channels[i];
+
+            LREP("Create network channel %d PANId %02X%02X\r\n", uival, u8aVal[1], u8aVal[0]);
+            MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_set_channel, (unsigned int)&uival);
+            MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_set_pan_id, (unsigned int)&u8aVal[0]);
         }
+    }else if(setting.network_type == setting_network_type_router){
+    	struct network_info nwk_info[1];
+    	LREP("Device as a Router device\r\n");
+    	LREP("Join to new network\r\n");
+    	// Request a network
+    	for(i = 11; i <= 25; i++){
+    		LREP("Detect network on channel %d ...", i);
+			ival = Network_detect_current_network(&g_nwk, i, nwk_info, 1);
+			if(ival > 0) LREP("found network panId %04X\r\n", nwk_info[0].panId);
+			else {
+				LREP("not found\r\n");
+				break;
+			}
+		}
+		if(i == 26) LREP("Not found any network\r\n");
+		else{
+			// Request to join network
+
+		}
     }
-    App_Initialize();
-    CLI_loop();
-    while(1){sleep(1);}
+
+    sem_post(&g_sem_debug_rx);
+    while(1){
+    	Network_loop(&g_nwk, 500);
+    }
     return 0;
 }
 void *Thread_DebugTX(void* pvParameters){
@@ -306,6 +348,15 @@ void *Thread_MiwiTask(void* pvParameters){
             MAC_mrf24j40_task(&g_rf_mac);
         }
         LED_TOGGLE(ORANGE);
+    }
+    return 0;
+}
+void *Thread_DebugRX(void* pvParameters){
+    sem_t* sem_startup = (sem_t*)pvParameters;
+    sem_wait(sem_startup);
+    sem_wait(g_sem_debug_rx);
+    while(1){
+    	CLI_loop();
     }
     return 0;
 }
