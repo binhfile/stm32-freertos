@@ -234,7 +234,7 @@ void *Thread_Startup(void *pvParameters){
     if(setting.network_type == setting_network_type_pan_coordinator){
         uint8_t noise_level[15];
         uint8_t channels[15];
-        struct network_info nwk_info[1];
+        struct network_beacon_info nwk_info[1];
 
         LREP("Device as a PAN coordinator\r\n");
         LREP("Scan free channel\r\n");
@@ -273,25 +273,39 @@ void *Thread_Startup(void *pvParameters){
             LREP("Create network channel %d PANId %02X%02X\r\n", uival, u8aVal[1], u8aVal[0]);
             MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_set_channel, (unsigned int)&uival);
             MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_set_pan_id, (unsigned int)&u8aVal[0]);
+            u8aVal[0] = 0; u8aVal[1] = 0;
+            MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_set_short_address, (unsigned int)&u8aVal[0]);
         }
     }else if(setting.network_type == setting_network_type_router){
-    	struct network_info nwk_info[1];
+    	struct network_beacon_info nwk_info[1];
     	LREP("Device as a Router device\r\n");
     	LREP("Join to new network\r\n");
     	// Request a network
-    	for(i = 11; i <= 25; i++){
+    	for(i = 25; i >= 11; i--){
     		LREP("Detect network on channel %d ...", i);
 			ival = Network_detect_current_network(&g_nwk, i, nwk_info, 1);
-			if(ival > 0) LREP("found network panId %04X\r\n", nwk_info[0].panId);
+			if(ival > 0){
+				LREP("found network panId %04X node %04X [rssi:%02X, lqi:%02X]\r\n",
+						nwk_info[0].panId, nwk_info[0].address,
+						nwk_info[0].rssi, nwk_info[0].lqi);
+				break;
+			}
 			else {
 				LREP("not found\r\n");
-				break;
 			}
 		}
 		if(i == 26) LREP("Not found any network\r\n");
 		else{
+			struct network_join_info join_info;
 			// Request to join network
-
+			if(Network_join_request(&g_nwk, i, nwk_info[0].panId, nwk_info[0].address, &join_info) == 0){
+				LREP("Join to network with address %04X\r\n", join_info.address);
+				u8aVal[0] = join_info.address & 0x00FF;
+				u8aVal[1] = (join_info.address >> 8) & 0x00FF;
+				MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_set_short_address, (unsigned int)&u8aVal[0]);
+			}else{
+				LREP("Join failed\r\n");
+			}
 		}
     }
 

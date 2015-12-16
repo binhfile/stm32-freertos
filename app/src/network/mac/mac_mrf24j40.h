@@ -120,6 +120,9 @@ struct __attribute__((packed)) mac_mrf24j40_read_param {
     uint16_t                        srcPANid;
     uint64_t                        srcAddr;
     uint64_t                        destAddr;
+    uint16_t fcs;
+    uint8_t  lqi;
+    uint8_t  rssi;
 };
 enum mac_mrf24j40_ioc{
     mac_mrf24j40_ioc_trigger_interrupt = 1, // args = 0

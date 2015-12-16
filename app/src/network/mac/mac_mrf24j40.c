@@ -376,9 +376,13 @@ int 	MAC_mrf24j40_read(struct mac_mrf24j40* mac, struct mac_mrf24j40_read_param 
 			hdr_len+=8;
 		}
 
-		payload_len = item->payload_len - hdr_len;
+		payload_len = item->payload_len - hdr_len - 4;
 		if(payload_len > payload_maxlen) payload_len = payload_maxlen;
+		if(payload_len < 0) payload_len = 0;
 		memcpy(payload, &item->payload[hdr_len], payload_len);
+		param->fcs = (((uint16_t)item->payload[item->payload_len - 4]) & 0x00FF) | ((((uint16_t)item->payload[item->payload_len - 3]) & 0x00FF) << 8);
+		param->lqi = item->payload[item->payload_len - 2];
+		param->rssi = item->payload[item->payload_len - 1];
 		param->frame_len = item->payload[0];
 		param->frame_ctrl.bits.Val = frmCtrl->bits.Val;
 		param->seq = item->payload[3];
