@@ -11,10 +11,14 @@
 #include <stdlib.h>
 #include <mac_mrf24j40.h>
 #include <setting.h>
+#include <unistd.h>
+#include <drv_gpio.h>
+#include <fcntl.h>
 
 struct setting_value		g_setting;
 
 #define NWK_LREP(x, args...) LREP("nwk: " x, ##args)
+#define NWK_LREP_WARN(x, args...) LREP("nwk %d@%s: " x, __LINE__, __FILE__,  ##args)
 #define NETWORK_H_BAR_LEN	80
 int Network_scan_channel(struct mac_mrf24j40 *mac, uint32_t channels, uint8_t * noise_level){
 	int timeout = 1000;
@@ -62,6 +66,10 @@ int Network_scan_channel(struct mac_mrf24j40 *mac, uint32_t channels, uint8_t * 
 	}
 
 	return ret;
+}
+int Network_init(struct network *nwk){
+	nwk->look = 0;
+	return 0;
 }
 int Network_beacon_request(struct network *nwk){
 	struct mac_mrf24j40_write_param write_param;
@@ -225,15 +233,15 @@ int Network_echo_respond(struct network *nwk, struct network_packet* pkt, int le
 	struct network_packet *res_pkt;
 	struct network_args_echo_res *res;
 	struct network_args_echo_req *req;
-	uint8_t buff[32];
+	uint8_t buff[144];
 
 	write_param.flags.bits.packetType 	= MAC_MRF24J40_PACKET_TYPE_DATA;
 	write_param.flags.bits.broadcast	= 0;
 	write_param.flags.bits.ackReq		= 0;
 	write_param.flags.bits.secEn		= 0;
-	write_param.flags.bits.intraPAN		= 0;
-	write_param.destPANId 				= read_param->srcAddr;
-	write_param.destAddress 			= (((uint16_t)nwk->mac->phy.pan_id[0]) & 0x00FF) | ((((uint16_t)nwk->mac->phy.pan_id[1]) << 8) & 0xFF00);
+	write_param.flags.bits.intraPAN		= 1;
+	write_param.destPANId 				= (((uint16_t)nwk->mac->phy.pan_id[0]) & 0x00FF) | ((((uint16_t)nwk->mac->phy.pan_id[1]) << 8) & 0xFF00);
+	write_param.destAddress 			= read_param->srcAddr;
 	write_param.srcAddressMode			= mac_iee802154_addrmode_16bit;
 	write_param.destAddressMode			= mac_iee802154_addrmode_16bit;
 
@@ -243,16 +251,19 @@ int Network_echo_respond(struct network *nwk, struct network_packet* pkt, int le
 	res_pkt->type = network_packet_type_echo_res;
 
 	req = (struct network_args_echo_req*)pkt->args;
-	for(i = 0; i < NWK_ECHO_LENGTH; i++){
+	if(req->length > NWK_ECHO_LENGTH_MAX) req->length = NWK_ECHO_LENGTH_MAX;
+	for(i = 0; i < req->length; i++){
 		res->data[i] = req->data[i];
 	}
 	len = sizeof(struct network_packet) - 1 + sizeof(struct network_args_echo_res);
+	res->length = req->length;
 
-	MAC_mrf24j40_write(nwk->mac, &write_param, pkt, len);
+	MAC_mrf24j40_write(nwk->mac, &write_param, res_pkt, len);
 	return ret;
 }
 int Network_process_packet(struct network *nwk, struct network_packet* pkt, int len, struct mac_mrf24j40_read_param *read_param){
 	int ret = 0;
+	int processed = 0;
 
 	if(len >= sizeof(struct network_packet)-1){
 		switch(pkt->type){
@@ -269,32 +280,20 @@ int Network_process_packet(struct network *nwk, struct network_packet* pkt, int 
 						(uint8_t)((read_param->srcAddr >> 8 * 6) & 0x00FF),
 						(uint8_t)((read_param->srcAddr >> 8 * 7) & 0x00FF));
 				Network_beacon_respond(nwk, read_param->srcAddr);
-				break;
-			}
-			case network_packet_type_join_req:{
-				// request to join
-				NWK_LREP("recv[rssi:%02X, lqi:%02X] a join request from %02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X\r\n",
-						read_param->rssi, read_param->lqi,
-						(uint8_t)((read_param->srcAddr >> 0) & 0x00FF),
-						(uint8_t)((read_param->srcAddr >> 8 * 1) & 0x00FF),
-						(uint8_t)((read_param->srcAddr >> 8 * 2) & 0x00FF),
-						(uint8_t)((read_param->srcAddr >> 8 * 3) & 0x00FF),
-						(uint8_t)((read_param->srcAddr >> 8 * 4) & 0x00FF),
-						(uint8_t)((read_param->srcAddr >> 8 * 5) & 0x00FF),
-						(uint8_t)((read_param->srcAddr >> 8 * 6) & 0x00FF),
-						(uint8_t)((read_param->srcAddr >> 8 * 7) & 0x00FF));
-				Network_join_respond(nwk, read_param->srcAddr);
+				processed = 1;
 				break;
 			}
 			case network_packet_type_echo_req:{
-				uint16_t address = ((uint16_t)(read_param->srcAddr & 0x00FFFF));
-				NWK_LREP("recv[rssi:%02X, lqi:%02X] ping request from %u\r\n",
-						read_param->rssi, read_param->lqi, address);
+//				uint16_t address = ((uint16_t)(read_param->srcAddr & 0x00FFFF));
+//				NWK_LREP("recv[rssi:%02X, lqi:%02X] ping request from %04X\r\n",
+//						read_param->rssi, read_param->lqi, address);
 				Network_echo_respond(nwk, pkt, len, read_param);
+				LED_TOGGLE(BLUE);
+				processed = 1;
 				break;
 			}
 		}
-		if(g_setting.network_type == setting_network_type_pan_coordinator){
+		if(processed == 0 && g_setting.network_type == setting_network_type_pan_coordinator){
 			switch(pkt->type){
 				case network_packet_type_join_req:{
 					// request to join
@@ -309,10 +308,16 @@ int Network_process_packet(struct network *nwk, struct network_packet* pkt, int 
 							(uint8_t)((read_param->srcAddr >> 8 * 6) & 0x00FF),
 							(uint8_t)((read_param->srcAddr >> 8 * 7) & 0x00FF));
 					Network_join_respond(nwk, read_param->srcAddr);
+					processed = 1;
 					break;
 				}
 			}
 		}
+		if(!processed){
+			NWK_LREP_WARN("packet type %02X not process\r\n", pkt->type);
+		}
+	}else if(len > 0){
+		NWK_LREP_WARN("packet invalid length %u\r\n", len);
 	}
 	return ret;
 }
@@ -320,9 +325,10 @@ int Network_loop(struct network *nwk, int timeout){
 	int ret = 0, ival;
     struct mac_mrf24j40_read_param read_param;
     char buff[144];
-
-    ival = MAC_mrf24j40_read(nwk->mac, &read_param, buff, 144, timeout);
-	ret = Network_process_packet(nwk, (struct network_packet*)buff, ival, &read_param);
+    if(nwk->look == 0){
+    	ival = MAC_mrf24j40_read(nwk->mac, &read_param, buff, 144, timeout);
+    	ret = Network_process_packet(nwk, (struct network_packet*)buff, ival, &read_param);
+    }else usleep(1000*100);
 	return ret;
 }
 int Network_echo_request(struct network *nwk, uint16_t address, int count, int datalen, struct network_echo_info* info){
@@ -334,9 +340,11 @@ int Network_echo_request(struct network *nwk, uint16_t address, int count, int d
 	struct network_args_echo_res* res;
 	struct mac_mrf24j40_read_param read_param;
 	struct network_packet* nwk_packet;
-	uint8_t tx[32], rx[144];
+	uint8_t tx[144], rx[144];
 	uint8_t cnt = 0;
 	int timeout = 200;
+	struct timespec t_now, t_ref;
+	int failed_cnt = 0;
 
 	write_param.flags.bits.packetType 	= MAC_MRF24J40_PACKET_TYPE_DATA;
 	write_param.flags.bits.broadcast	= 0;
@@ -356,10 +364,20 @@ int Network_echo_request(struct network *nwk, uint16_t address, int count, int d
 	pkt->hops = 1;
 	pkt->type = network_packet_type_echo_req;
 
-	info->total = count;
-	info->passed = 0;
-	while(count -- ){
-		for(i = 0; i < NWK_ECHO_LENGTH; i++)
+	info->total 	= count;
+	info->passed 	= 0;
+	info->failed 	= 0;
+	info->timeout 	= 0;
+	info->time_diff = 0;
+	if(datalen > NWK_ECHO_LENGTH_MAX) datalen = NWK_ECHO_LENGTH_MAX;
+	req->length = datalen;
+
+	nwk->look 		= 1;
+	usleep(1000* 200);
+	clock_gettime(CLOCK_REALTIME, &t_ref);
+	while(count -- && kb_value() != 0x03){
+		failed_cnt++;
+		for(i = 0; i < datalen; i++)
 			req->data[i] = cnt++;
 		len = sizeof(struct network_packet) - 1 + sizeof(struct network_args_echo_req);
 
@@ -367,18 +385,35 @@ int Network_echo_request(struct network *nwk, uint16_t address, int count, int d
 		len = MAC_mrf24j40_read(nwk->mac, &read_param, rx, 144, timeout);
 		if(len >= sizeof(struct network_packet)-1){
 			if(nwk_packet->type == network_packet_type_echo_res){
-				for(i = 0; i < NWK_ECHO_LENGTH; i++){
-					if(res->data[i] != req->data[i]) break;
+				i = 0;
+				if(res->length == req->length){
+					for(i = 0; i < datalen; i++){
+						if(res->data[i] != req->data[i]) break;
+					}
 				}
-				if(i == NWK_ECHO_LENGTH) {
+				if(i == datalen) {
 					info->passed ++;
+					failed_cnt = 0;
+				}else{
+					info->failed++;
 				}
 			}else{
-				Network_process_packet(nwk, (struct network_packet*)rx, len, &read_param);
+//				NWK_LREP_WARN("packet type %02X not echo-res\r\n", nwk_packet->type);
+				info->timeout++;
+				Network_process_packet(nwk, nwk_packet, len, &read_param);
 			}
+		}else{
+			if(len > 0)
+				NWK_LREP_WARN("packet invalid length %u\r\n", len);
+			info->timeout++;
+
 		}
+		if(failed_cnt > 10) break;
 	}
-	ret = 0;
+	nwk->look = 0;
+	clock_gettime(CLOCK_REALTIME, &t_now);
+	info->time_diff = t_now.tv_sec * 1000 + t_now.tv_nsec / 1000000 - (t_ref.tv_sec * 1000 + t_ref.tv_nsec / 1000000);
+	ret = (failed_cnt > 10) ? -1:0;
 	return ret;
 }
 // end of file

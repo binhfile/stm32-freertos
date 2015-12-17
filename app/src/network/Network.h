@@ -9,7 +9,10 @@
 #define SRC_NETWORK_NETWORK_H_
 
 #include <stdint.h>
+#include <semaphore.h>
 #include "network/mac/mac_mrf24j40.h"
+#define NWK_LOOK(nwk) (nwk)->look = 1
+#define NWK_UNLOOK(nwk) (nwk)->look = 0
 enum network_packet_type{
 	network_packet_type_beacon_req = 1,
 	network_packet_type_beacon_res,
@@ -27,6 +30,7 @@ struct  __attribute__((packed)) network_packet{
 };
 struct network{
 	struct mac_mrf24j40 *mac;
+	int look;
 };
 struct network_beacon_info{
 	uint16_t panId;
@@ -40,6 +44,9 @@ struct network_join_info{
 struct network_echo_info{
 	int total;
 	int passed;
+	int timeout;
+	int failed;
+	unsigned int time_diff;
 };
 
 struct  __attribute__((packed)) network_args_beacon_req{
@@ -54,16 +61,18 @@ struct  __attribute__((packed)) network_args_join_req{
 struct  __attribute__((packed)) network_args_join_res{
 	uint16_t address;
 };
-#define NWK_ECHO_LENGTH		(16)
+#define NWK_ECHO_LENGTH_MAX		(100)
 struct  __attribute__((packed)) network_args_echo_req{
-	uint8_t data[NWK_ECHO_LENGTH];
+	uint8_t length;
+	uint8_t data[NWK_ECHO_LENGTH_MAX];
 };
 struct  __attribute__((packed)) network_args_echo_res{
-	uint8_t data[NWK_ECHO_LENGTH];
+	uint8_t length;
+	uint8_t data[NWK_ECHO_LENGTH_MAX];
 };
 
 
-
+int Network_init(struct network *nwk);
 int Network_scan_channel(struct mac_mrf24j40 *mac, uint32_t channels, uint8_t * noise_level);
 
 int Network_beacon_request(struct network *nwk);

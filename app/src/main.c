@@ -104,7 +104,7 @@ int main(void)
     DEFINE_THREAD(Thread_DebugTX, configMINIMAL_STACK_SIZE*8,  tskIDLE_PRIORITY + 1UL);
     DEFINE_THREAD(Thread_RFIntr,  configMINIMAL_STACK_SIZE*16, tskIDLE_PRIORITY + 3UL);
     DEFINE_THREAD(Thread_MiwiTask,configMINIMAL_STACK_SIZE*32, tskIDLE_PRIORITY + 4UL);
-    DEFINE_THREAD(Thread_DebugRX, configMINIMAL_STACK_SIZE*8,  tskIDLE_PRIORITY + 1UL);
+    DEFINE_THREAD(Thread_DebugRX, configMINIMAL_STACK_SIZE*32,  tskIDLE_PRIORITY + 1UL);
     
     /* Start the RTOS Scheduler */
     vTaskStartScheduler();
@@ -114,7 +114,7 @@ int main(void)
 }
 struct mac_mrf24j40_open_param  rf_mac_init;
 void *Thread_Startup(void *pvParameters){
-    int i,j, ival;
+    int i, ival;
     struct termios2 opt;
     unsigned int uival;
     uint8_t u8aVal[32];
@@ -201,6 +201,7 @@ void *Thread_Startup(void *pvParameters){
     g_nwk.mac = &g_rf_mac;
     // Miwi network
     MAC_mrf24j40_open(&g_rf_mac, &rf_mac_init);
+    Network_init(&g_nwk);
     srand(0);
 
     // signal all other thread startup
@@ -210,7 +211,7 @@ void *Thread_Startup(void *pvParameters){
     }
     usleep(1000* 100);
     LREP("\r\nHit any key to break boot sequence");
-    uint8_t timeout = 5;
+    uint8_t timeout = 3;
     uint8_t input = 0;
     while(timeout-- && input == 0){
     	LREP(".");
@@ -232,37 +233,40 @@ void *Thread_Startup(void *pvParameters){
 
     // PAN Coordinator
     if(g_setting.network_type == setting_network_type_pan_coordinator){
-        uint8_t noise_level[15];
+//        uint8_t noise_level[15];
         uint8_t channels[15];
         struct network_beacon_info nwk_info[1];
 
         LREP("Device as a PAN coordinator\r\n");
         LREP("Scan free channel\r\n");
-        for(i =0 ;i < 15; i++) channels[i] = i + 11;
-        Network_scan_channel(&g_rf_mac, 0x03fff800, noise_level);
-        // sort noise level
-        for(i = 0; i < 15-1; i++){
-            for(j = i+1; j < 15; j++){
-                if(noise_level[i] > noise_level[j]){
-                    noise_level[i] ^= noise_level[j];
-                    noise_level[j] ^= noise_level[i];
-                    noise_level[i] ^= noise_level[j];
-
-                    channels[i] ^= channels[j];
-                    channels[j] ^= channels[i];
-                    channels[i] ^= channels[j];
-                }
-            }
-        }
-        for(i = 0; i < 15; i++){
+//        for(i =0 ;i < 15; i++) channels[i] = i + 11;
+//        Network_scan_channel(&g_rf_mac, 0x03fff800, noise_level);
+//        // sort noise level
+//        for(i = 0; i < 15-1; i++){
+//            for(j = i+1; j < 15; j++){
+//                if(noise_level[i] > noise_level[j]){
+//                    noise_level[i] ^= noise_level[j];
+//                    noise_level[j] ^= noise_level[i];
+//                    noise_level[i] ^= noise_level[j];
+//
+//                    channels[i] ^= channels[j];
+//                    channels[j] ^= channels[i];
+//                    channels[i] ^= channels[j];
+//                }
+//            }
+//        }
+        //for(i =0 ;i < 15; i++) channels[14-i] = i + 11;
+        i = 0;
+        channels[i] = 25;
+        //for(i = 0; i < 15; i++){
             LREP("Detect network on channel %d ...", channels[i]);
             ival = Network_detect_current_network(&g_nwk, channels[i], nwk_info, 1);
             if(ival > 0) LREP("found network panId %04X\r\n", nwk_info[0].panId);
             else {
             	LREP("not found\r\n");
-            	break;
+//            	break;
             }
-        }
+//        }
         if(i == 15) LREP("Not found free channel\r\n");
         else{
             uival = rand();
@@ -280,38 +284,46 @@ void *Thread_Startup(void *pvParameters){
     	struct network_beacon_info nwk_info[1];
     	LREP("Device as a Router device\r\n");
     	LREP("Join to new network\r\n");
-    	// Request a network
-    	for(i = 25; i >= 11; i--){
-    		LREP("Detect network on channel %d ...", i);
-			ival = Network_detect_current_network(&g_nwk, i, nwk_info, 1);
-			if(ival > 0){
-				LREP("found network panId %04X node %04X [rssi:%02X, lqi:%02X]\r\n",
-						nwk_info[0].panId, nwk_info[0].address,
-						nwk_info[0].rssi, nwk_info[0].lqi);
-				break;
+    	while(1){
+			// Request a network
+			for(i = 25; i >= 11; i--){
+				LREP("Detect network on channel %d ...", i);
+				ival = Network_detect_current_network(&g_nwk, i, nwk_info, 1);
+				if(ival > 0){
+					LREP("found network panId %04X node %04X [rssi:%02X, lqi:%02X]\r\n",
+							nwk_info[0].panId, nwk_info[0].address,
+							nwk_info[0].rssi, nwk_info[0].lqi);
+					break;
+				}
+				else {
+					LREP("not found\r\n");
+				}
 			}
-			else {
-				LREP("not found\r\n");
+			if(i == 26) LREP("Not found any network\r\n");
+			else{
+				struct network_join_info join_info;
+				// Request to join network
+				if(Network_join_request(&g_nwk, i, nwk_info[0].panId, nwk_info[0].address, &join_info) == 0){
+					LREP("Join to network with address %04X\r\n", join_info.address);
+					u8aVal[0] = join_info.address & 0x00FF;
+					u8aVal[1] = (join_info.address >> 8) & 0x00FF;
+					MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_set_short_address, (unsigned int)&u8aVal[0]);
+					u8aVal[0] = nwk_info[0].panId & 0x00FF;
+					u8aVal[1] = (nwk_info[0].panId >> 8) & 0x00FF;
+					MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_set_pan_id, (unsigned int)&u8aVal[0]);
+					break;
+				}else{
+					LREP("Join failed\r\n");
+
+				}
 			}
-		}
-		if(i == 26) LREP("Not found any network\r\n");
-		else{
-			struct network_join_info join_info;
-			// Request to join network
-			if(Network_join_request(&g_nwk, i, nwk_info[0].panId, nwk_info[0].address, &join_info) == 0){
-				LREP("Join to network with address %04X\r\n", join_info.address);
-				u8aVal[0] = join_info.address & 0x00FF;
-				u8aVal[1] = (join_info.address >> 8) & 0x00FF;
-				MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_set_short_address, (unsigned int)&u8aVal[0]);
-			}else{
-				LREP("Join failed\r\n");
-			}
-		}
+    	}
     }
 
     sem_post(&g_sem_debug_rx);
     while(1){
-    	Network_loop(&g_nwk, 500);
+    	Network_loop(&g_nwk, 100);
+        LED_TOGGLE(GREEN);
     }
     return 0;
 }
@@ -361,7 +373,6 @@ void *Thread_MiwiTask(void* pvParameters){
         if(MAC_mrf24j40_select(&g_rf_mac, 100)){
             MAC_mrf24j40_task(&g_rf_mac);
         }
-        LED_TOGGLE(ORANGE);
     }
     return 0;
 }
