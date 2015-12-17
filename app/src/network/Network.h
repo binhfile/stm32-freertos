@@ -16,6 +16,9 @@ enum network_packet_type{
 
 	network_packet_type_join_req,
 	network_packet_type_join_res,
+
+	network_packet_type_echo_req,
+	network_packet_type_echo_res
 };
 struct  __attribute__((packed)) network_packet{
 	uint8_t hops;	// max hops
@@ -34,6 +37,10 @@ struct network_beacon_info{
 struct network_join_info{
 	uint16_t address;
 };
+struct network_echo_info{
+	int total;
+	int passed;
+};
 
 struct  __attribute__((packed)) network_args_beacon_req{
 };
@@ -47,6 +54,13 @@ struct  __attribute__((packed)) network_args_join_req{
 struct  __attribute__((packed)) network_args_join_res{
 	uint16_t address;
 };
+#define NWK_ECHO_LENGTH		(16)
+struct  __attribute__((packed)) network_args_echo_req{
+	uint8_t data[NWK_ECHO_LENGTH];
+};
+struct  __attribute__((packed)) network_args_echo_res{
+	uint8_t data[NWK_ECHO_LENGTH];
+};
 
 
 
@@ -55,6 +69,7 @@ int Network_scan_channel(struct mac_mrf24j40 *mac, uint32_t channels, uint8_t * 
 int Network_beacon_request(struct network *nwk);
 int Network_detect_current_network(struct network *nwk, unsigned int channel, struct network_beacon_info *info, int info_max_count);
 int Network_join_request(struct network *nwk, unsigned int channel, uint16_t panId, uint16_t address, struct network_join_info* info);
+int Network_echo_request(struct network *nwk, uint16_t address, int count, int datalen, struct network_echo_info* info);
 
 int Network_loop(struct network *nwk, int timeout);
 #endif /* SRC_NETWORK_NETWORK_H_ */

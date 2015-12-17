@@ -46,6 +46,7 @@ int					g_fd_rtc			= -1;
 struct mac_mrf24j40         g_rf_mac;
 struct network				g_nwk;
 struct setting_device       g_setting_dev;
+struct setting_value		g_setting;
 
 extern int board_register_devices();
 int g_thread_index = 1;
@@ -116,7 +117,6 @@ void *Thread_Startup(void *pvParameters){
     int i,j, ival;
     struct termios2 opt;
     unsigned int uival;
-    struct setting_value setting;
     uint8_t u8aVal[32];
     
     // register drivers & devices
@@ -221,17 +221,17 @@ void *Thread_Startup(void *pvParameters){
     	while(1){sleep(1);}
     }
     LREP("DONE\r\n");
-    setting_read(&g_setting_dev, &setting);
+    setting_read(&g_setting_dev, &g_setting);
     LREP("Setting:\r\n");
-    setting_dump_to_stdio(&setting);
+    setting_dump_to_stdio(&g_setting);
     uival = 25;
     MAC_mrf24j40_ioctl(&g_rf_mac, mac_mrf24j40_ioc_set_channel, (unsigned int)&uival);
     for(i = 0; i < 8 ; i++)
-        u8aVal[i] = setting.mac_long_address[i];
+        u8aVal[i] = g_setting.mac_long_address[i];
     MAC_mrf24j40_ioctl(&g_rf_mac, mac_mrf24j40_ioc_set_long_address, (unsigned int)u8aVal);
 
     // PAN Coordinator
-    if(setting.network_type == setting_network_type_pan_coordinator){
+    if(g_setting.network_type == setting_network_type_pan_coordinator){
         uint8_t noise_level[15];
         uint8_t channels[15];
         struct network_beacon_info nwk_info[1];
@@ -276,7 +276,7 @@ void *Thread_Startup(void *pvParameters){
             u8aVal[0] = 0; u8aVal[1] = 0;
             MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_set_short_address, (unsigned int)&u8aVal[0]);
         }
-    }else if(setting.network_type == setting_network_type_router){
+    }else if(g_setting.network_type == setting_network_type_router){
     	struct network_beacon_info nwk_info[1];
     	LREP("Device as a Router device\r\n");
     	LREP("Join to new network\r\n");
