@@ -13,8 +13,7 @@ READELF=$(TOOLCHAIN_DIR)/bin/arm-none-eabi-readelf
 ###
 # Directory Structure
 BINDIR=bin
-INCDIR=inc
-SRCDIR=src
+SRCDIR=.
 EXTRALIB_DIR=../extralib
 OS_DIR=../opensource/FreeRTOS
 HW_DIR=../opensource/STM32F4-Discovery_FW_V1.1.0
@@ -25,16 +24,16 @@ ASOURCES=$(shell find -L $(SRCDIR) -name '*.s')
 ASOURCES+=$(HW_DIR)/Libraries/CMSIS/ST/STM32F4xx/Source/Templates/gcc_ride7/startup_stm32f4xx.s
 
 CSOURCES+=$(shell find -L $(SRCDIR) -name '*.c')
-CSOURCES+=$(shell find -L $(EXTRALIB_DIR)/src -name '*.c')
+CSOURCES+=$(shell find -L $(EXTRALIB_DIR) -name '*.c')
 CSOURCES+=$(HW_DIR)/Utilities/STM32F4-Discovery/stm32f4_discovery.c
 CSOURCES+=$(shell find -L $(OS_DIR) -name '*.c')
 CSOURCES+=$(shell find -L $(HW_DIR)/Libraries/STM32F4xx_StdPeriph_Driver -name '*.c')
 #CSOURCES+=$(shell find -L $(MESH_DIR) -name '*.c')
 # Find header directories
-INC=$(shell find -L . -name '*.h' -exec dirname {} \; | uniq)
+INC=$(shell find -L $(SRCDIR) -name '*.h' -exec dirname {} \; | uniq)
 INC+=$(shell find -L $(OS_DIR) -name '*.h' -exec dirname {} \; | uniq)
 INC+=$(shell find -L $(HW_DIR) -name '*.h' -exec dirname {} \; | uniq)
-INC+=$(shell find -L $(EXTRALIB_DIR)/include -name '*.h' -exec dirname {} \; | uniq)
+INC+=$(shell find -L $(EXTRALIB_DIR) -name '*.h' -exec dirname {} \; | uniq)
 #INC+=$(shell find -L $(MESH_DIR) -name '*.h' -exec dirname {} \; | uniq)
 INCLUDES=$(INC:%=-I%)
 # Create object list
