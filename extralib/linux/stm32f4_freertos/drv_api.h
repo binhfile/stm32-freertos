@@ -13,7 +13,7 @@ extern "C" {
 #endif
 #include <stdint.h>
 #include "drv_errno.h"
-#include <fcntl.h>
+#include "fcntl.h"
 
 typedef int (*init_fxn)(void);
 struct device {

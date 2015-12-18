@@ -4,7 +4,7 @@
  *  Created on: Nov 28, 2015
  *      Author: dev
  */
-#include "../include/flag_event.h"
+#include "flag_event.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include "semphr.h"

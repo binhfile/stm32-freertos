@@ -7,7 +7,7 @@
 
 #ifndef INCLUDE_FLAG_EVENT_H_
 #define INCLUDE_FLAG_EVENT_H_
-#include "time.h"
+#include <time.h>
 #define flag_event_t	void*
 
 int flag_event_init(flag_event_t* event);

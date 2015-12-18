@@ -1,7 +1,7 @@
 #include "drv_api.h"
 #include "drv_errno.h"
-#include <string.h>
-#include <fcntl.h>
+#include "string.h"
+#include "fcntl.h"
 #include "FreeRTOS.h"
 
 int    errno = 0;

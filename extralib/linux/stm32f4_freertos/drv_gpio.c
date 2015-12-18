@@ -1,5 +1,5 @@
-#include "../include/drv_api.h"
-#include "../include/drv_gpio.h"
+#include "drv_api.h"
+#include "drv_gpio.h"
 
 #include "stm32f4xx_gpio.h"
 #include "stm32f4xx_rcc.h"

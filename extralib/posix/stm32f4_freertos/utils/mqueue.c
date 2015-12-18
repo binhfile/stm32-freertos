@@ -1,4 +1,4 @@
-#include "../include/mqueue.h"
+#include "mqueue.h"
 //On success, mq_open() returns a message queue descriptor for use by other message queue functions.  On error, mq_open() returns (mqd_t) -1, with errno set to indicate the error.
 mqd_t mq_open(const char *name, int oflag){
 	mqd_t ret = xQueueCreate(oflag, 1);

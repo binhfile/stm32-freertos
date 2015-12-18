@@ -1,5 +1,7 @@
-#include "../include/semaphore.h"
-#include "drv_api.h"
+#include "semaphore.h"
+#include "FreeRTOS.h"
+#include "task.h"
+#include "drv_errno.h"
 //sem_init() returns 0 on success; on error, -1 is returned, and errno is set to indicate the error.
 int sem_init(sem_t *sem, int pshared, unsigned int value){
 	*sem = xSemaphoreCreateCounting(SEM_MAX_COUNT, value);
