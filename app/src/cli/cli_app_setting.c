@@ -45,6 +45,7 @@ void cli_app_st_write(const char* param, const char* value){
     int invalid = 0;
     int ival, i;
     setting_read(&g_setting_dev, &setting);
+    setting.magic_id = setting_value_magic_id;
     if(strcmp(param, "type") == 0){
         ival = strtol(value, 0, 10);
         LREP("\r\nwrite type = %d\r\n", ival);

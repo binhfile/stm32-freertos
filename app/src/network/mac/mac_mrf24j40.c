@@ -4,98 +4,102 @@
  *  Created on: Nov 29, 2015
  *      Author: dev
  */
-
+#include "project_config.h"
 #include "mac_mrf24j40.h"
 #include "mac_mrf24j40_defs.h"
 #include <unistd.h>
 #include <fcntl.h>
-#include <spidev.h>
-#include <drv_gpio.h>
 #include <debug.h>
 #include <string.h>
 
 #define PHY_SET_REG_VERIFY	0
 
+#if defined(OS_FREERTOS)
+#define PHY_SPEED	15000000
+#define PHY_SET_CS(phy, val) { \
+		uint8_t __u8val = val;\
+		if(phy->fd_cs >= 0) write(phy->fd_cs, &__u8val, 1);\
+}
+#elif defined(OS_LINUX)
+#define PHY_SPEED   1000000
+#define PHY_SET_CS(phy, val) { \
+		uint8_t __u8val = (val == 0) ? '0' : '1';\
+		if(phy->fd_cs >= 0) write(phy->fd_cs, &__u8val, 1);\
+}
+#endif
 uint8_t PHY_mrf24j40_getLongRAMAddr	(struct phy_mrf24j40* phy,uint16_t address){
 	uint8_t u8tx[3], u8rx[3];
 	struct spi_ioc_transfer xfer;
 
-	u8tx[0] = 0;
-	write(phy->fd_cs, u8tx, 1);	// active cs
+	PHY_SET_CS(phy, 0);
 	xfer.tx_buf			= (unsigned int)u8tx;
 	xfer.rx_buf 		= (unsigned int)u8rx;
-	xfer.bits_per_word 	= 0;
-	xfer.speed_hz 		= 0;
+	xfer.bits_per_word 	= 8;
+	xfer.speed_hz 		= PHY_SPEED;
 	xfer.len			= 3;
 	u8tx[0] = ((address >> 3)&0x7F) | 0x80;
 	u8tx[1] = ((address << 5)&0xE0);
 	u8tx[2] = 0;
 	u8rx[2] = 0;
 	ioctl(phy->fd_spi, SPI_IOC_MESSAGE(1), (unsigned int)&xfer);
-	u8tx[0] = 1;
-	write(phy->fd_cs, u8tx, 1);	// deactive cs
+	PHY_SET_CS(phy, 1);
 	return u8rx[2];
 }
 uint8_t PHY_mrf24j40_getShortRAMAddr(struct phy_mrf24j40* phy,uint8_t address){
 	uint8_t u8tx[2], u8rx[2];
 	struct spi_ioc_transfer xfer;
 
-	u8tx[0] = 0;
-	write(phy->fd_cs, u8tx, 1);	// active cs
+	PHY_SET_CS(phy, 0);
 	xfer.tx_buf			= (unsigned int)u8tx;
 	xfer.rx_buf 		= (unsigned int)u8rx;
-	xfer.bits_per_word 	= 0;
-	xfer.speed_hz 		= 0;
+	xfer.bits_per_word 	= 8;
+	xfer.speed_hz 		= PHY_SPEED;
 	xfer.len			= 2;
 	u8tx[0] 			= address;
 	u8tx[1]				= 0;
 	u8rx[1] 			= 0;
 	ioctl(phy->fd_spi, SPI_IOC_MESSAGE(1), (unsigned int)&xfer);
-	u8tx[0] = 1;
-	write(phy->fd_cs, u8tx, 1);	// deactive cs
+	PHY_SET_CS(phy, 1);
 	return u8rx[1];
 }
 void 	PHY_mrf24j40_setLongRAMAddr	(struct phy_mrf24j40* phy,uint16_t address, uint8_t value){
 	uint8_t u8tx[3];
 	struct spi_ioc_transfer xfer;
 
-	u8tx[0] = 0;
-	write(phy->fd_cs, u8tx, 1);	// active cs
+	PHY_SET_CS(phy, 0);
 	xfer.tx_buf			= (unsigned int)u8tx;
 	xfer.rx_buf 		= 0;
-	xfer.bits_per_word 	= 0;
-	xfer.speed_hz 		= 0;
+	xfer.bits_per_word 	= 8;
+	xfer.speed_hz 		= PHY_SPEED;
 	xfer.len			= 3;
 	u8tx[0] = (((address >> 3))&0x7F) | 0x80;
 	u8tx[1] = (((address << 5))&0xE0) | 0x10;
 	u8tx[2] = value;
 	ioctl(phy->fd_spi, SPI_IOC_MESSAGE(1), (unsigned int)&xfer);
-	u8tx[0] = 1;
-	write(phy->fd_cs, u8tx, 1);	// deactive cs
+	PHY_SET_CS(phy, 1);
 #if (PHY_SET_REG_VERIFY > 0)
 	u8tx[0] = PHY_mrf24j40_getLongRAMAddr(phy, address);
 	if(u8tx[0] != value){
 		LREP_WARN("PHY set reg %04X=%02X failed, read back %02X\r\n",
 				address, value, u8tx[0]);
-	}
+	}else LREP("PHY set reg %04X=%02X done\r\n",
+			address, value);
 #endif
 }
 void 	PHY_mrf24j40_setShortRAMAddr(struct phy_mrf24j40* phy,uint8_t address, uint8_t value){
 	uint8_t u8tx[2];
 	struct spi_ioc_transfer xfer;
 
-	u8tx[0] = 0;
-	write(phy->fd_cs, u8tx, 1);	// active cs
+	PHY_SET_CS(phy, 0);
 	xfer.tx_buf			= (unsigned int)u8tx;
 	xfer.rx_buf 		= 0;
-	xfer.bits_per_word 	= 0;
-	xfer.speed_hz 		= 0;
+	xfer.bits_per_word 	= 8;
+	xfer.speed_hz 		= PHY_SPEED;
 	xfer.len			= 2;
 	u8tx[0] = address;
 	u8tx[1] = value;
 	ioctl(phy->fd_spi, SPI_IOC_MESSAGE(1), (unsigned int)&xfer);
-	u8tx[0] = 1;
-	write(phy->fd_cs, u8tx, 1);	// deactive cs
+	PHY_SET_CS(phy, 1);
 	// verify
 #if (PHY_SET_REG_VERIFY > 0)
 	if(address != PHY_MRF24J40_WRITE_SOFTRST){
@@ -108,16 +112,25 @@ void 	PHY_mrf24j40_setShortRAMAddr(struct phy_mrf24j40* phy,uint8_t address, uin
 		if(u8tx[0] != value){
 			LREP_WARN("PHY set reg %02X=%02X failed, read back %02X\r\n",
 					address, value, u8tx[0]);
-		}
+		}else LREP("PHY set reg %02X=%02X done\r\n",
+				address, value);
 	}
 #endif
 }
 void PHY_mrf24j40_hardreset(struct phy_mrf24j40* phy){
 	uint8_t u8val = 0;
-
+#if defined(OS_FREERTOS)
+	u8val = 0;
+#elif defined(OS_LINUX)
+	u8val = '0';
+#endif
 	write(phy->fd_reset, &u8val, 1);
 	usleep(1000 * 100);
+#if defined(OS_FREERTOS)
 	u8val = 1;
+#elif defined(OS_LINUX)
+	u8val = '1';
+#endif
 	write(phy->fd_reset, &u8val, 1);
 	usleep(1000 * 100);
 }
@@ -319,7 +332,8 @@ int 	MAC_mrf24j40_open(struct mac_mrf24j40* mac, struct mac_mrf24j40_open_param 
 	flag_event_init(&mac->event);
 	flag_event_init(&mac->rx_event);
 	sem_init(&mac->sem_access, 0, 1);
-
+	sem_wait(&mac->sem_access);
+	sem_post(&mac->sem_access);
 	PHY_mrf24j40_initialize(&mac->phy);
 	ret = 0;
 

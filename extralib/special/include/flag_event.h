@@ -8,7 +8,11 @@
 #ifndef INCLUDE_FLAG_EVENT_H_
 #define INCLUDE_FLAG_EVENT_H_
 #include <time.h>
+#if defined(OS_FREERTOS)
 #define flag_event_t	void*
+#elif defined(OS_LINUX)
+#define flag_event_t	int
+#endif
 
 int flag_event_init(flag_event_t* event);
 int flag_event_destroy(flag_event_t *event);

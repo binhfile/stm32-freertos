@@ -5,10 +5,10 @@
  *      Author: dev
  */
 
+#include "project_config.h"
 #include "Test.h"
 #include <debug.h>
 #include <unistd.h>
-#include <drv_gpio.h>
 #include "network/mac/mac_mrf24j40.h"
 #include <Network.h>
 #include <setting.h>

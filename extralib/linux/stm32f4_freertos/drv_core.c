@@ -360,12 +360,22 @@ int 	select(int fd, fd_set *readfds, fd_set *writefds,
 	int readfd = 0, writefd = 0, errorfd = 0;
 	int s_timeout = 0;
 
+	fd = fd - 1;
 	if(fd >= 0 && fd <= (&___dev_lookup_end - &___dev_lookup_begin)){
 		drv = (pdev[fd])->driver;
 		if(drv->select){
-			if(readfds) readfd 		= 1;
-			if(writefds) writefd 	= 1;
-			if(exceptfds) errorfd 	= 1;
+			if(readfds) {
+				FD_CLR(fd, readfds);
+				readfd 		= 1;
+			}
+			if(writefds){
+				FD_CLR(fd, writefds);
+				writefd 	= 1;
+			}
+			if(exceptfds){
+				FD_CLR(fd, exceptfds);
+				errorfd 	= 1;
+			}
 
 			s_timeout = 0;
 			if(timeout){

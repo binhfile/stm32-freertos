@@ -4,6 +4,8 @@
  *  Created on: Dec 14, 2015
  *      Author: dev
  */
+
+#if defined(STM32F4XX)
 #include <stdlib.h>
 #include <fcntl.h>
 #include <time.h>
@@ -161,5 +163,5 @@ time_t mktime (struct tm * timeptr){
 	ret += timeptr->tm_sec;
 	return ret;
 }
-
+#endif
 

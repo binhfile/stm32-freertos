@@ -18,7 +18,7 @@ int 	strcmp(const char *p1_str, const char *p2_str);
 size_t  strlen(const char *s);
 char *	strchr(const char *s, int c);
 char *	strchrnul(const char *str, int ch);
-
+size_t  strcspn(const char *s, const char *reject);
 
 void *	memset(void *s, int val, size_t count);
 void    memcpy(void *pdest, const void *psrc, size_t size);

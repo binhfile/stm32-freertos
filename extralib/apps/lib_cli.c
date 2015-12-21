@@ -9,6 +9,10 @@
 #include <fcntl.h>
 #include <string.h>
 #include <debug.h>
+#if defined(OS_LINUX)
+#include <stdio.h>
+#include <sys/select.h>
+#endif
 
 int lib_cli_init(struct lib_cli *inst){
 	int ret = 0;
@@ -53,7 +57,11 @@ int lib_cli_set_banner(struct lib_cli *inst, const char* banner){
 	return ret;
 }
 inline uint8_t lib_cli_is_char_valid(uint8_t val){
-	return (val >= 32 && val <= 126);
+	//return (val >= 32 && val <= 126);
+	return (val >= '0' && val <= '9') ||
+			(val >= 'A' && val <= 'Z') ||
+			(val >= 'a' && val <= 'z') ||
+			(val == '-' || val == ' ' || val == '?');
 }
 inline uint8_t lib_cli_is_space(uint8_t val){
 	return ((val == ' '));
@@ -61,7 +69,7 @@ inline uint8_t lib_cli_is_space(uint8_t val){
 //#define lib_cli_write(x)	write(inst->write_fd, x, strlen(x))
 #define lib_cli_write(x)	LREP("%s", x)
 
-#define CLI_MAX_ARGV		5
+#define CLI_MAX_ARGV		10
 #define CLI_BUF_MAX_LEN		64
 int lib_cli_loop(struct lib_cli *inst, int timeout){
 	int ret = 0;
@@ -77,16 +85,17 @@ int lib_cli_loop(struct lib_cli *inst, int timeout){
     int argc_cnt;
     int full;
 
-    FD_CLR(inst->fd_read, &readfs);
-    s_timeout.tv_sec  = 1;
-    s_timeout.tv_usec = 0;
-
     lib_cli_write(inst->banner);
     snprintf((char*)prompt, 31, "%s%c ", inst->hostname, inst->prompt);
     lib_cli_write(prompt);
     buff_index = 0;
     while(1){
-		len = select(inst->fd_read, (unsigned int*)&readfs, 0, 0, &s_timeout);
+        s_timeout.tv_sec  = 1;
+        s_timeout.tv_usec = 0;
+        FD_ZERO(&readfs);
+        FD_SET(inst->fd_read, &readfs);
+
+		len = select(inst->fd_read+1, &readfs, 0, 0, &s_timeout);
 		if(len > 0){
 			if(FD_ISSET(inst->fd_read, &readfs)){
 				len = read(inst->fd_read, buff, 32);
@@ -95,7 +104,7 @@ int lib_cli_loop(struct lib_cli *inst, int timeout){
 						if(lib_cli_is_char_valid(buff[i])){
 							write(inst->fd_write, &buff[i], 1);
 							if(buff_index < CLI_BUF_MAX_LEN) buff_process[buff_index++] = buff[i];
-						}else if(buff[i] == 13){
+						}else if(buff[i] == 13 || buff[i] == 10){
 							// enter
 							argc_cnt = 0;
 							if(buff_index > 0){

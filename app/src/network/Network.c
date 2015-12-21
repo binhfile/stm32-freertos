@@ -4,7 +4,7 @@
  *  Created on: Dec 10, 2015
  *      Author: dev
  */
-
+#include "project_config.h"
 #include "Network.h"
 #include <debug.h>
 #include <unistd.h>
@@ -12,7 +12,6 @@
 #include <mac_mrf24j40.h>
 #include <setting.h>
 #include <unistd.h>
-#include <drv_gpio.h>
 #include <fcntl.h>
 
 struct setting_value		g_setting;
@@ -68,7 +67,7 @@ int Network_scan_channel(struct mac_mrf24j40 *mac, uint32_t channels, uint8_t * 
 	return ret;
 }
 int Network_init(struct network *nwk){
-	nwk->look = 0;
+	nwk->lock = 0;
 	return 0;
 }
 int Network_beacon_request(struct network *nwk){
@@ -325,7 +324,7 @@ int Network_loop(struct network *nwk, int timeout){
 	int ret = 0, ival;
     struct mac_mrf24j40_read_param read_param;
     char buff[144];
-    if(nwk->look == 0){
+    if(nwk->lock == 0){
     	ival = MAC_mrf24j40_read(nwk->mac, &read_param, buff, 144, timeout);
     	ret = Network_process_packet(nwk, (struct network_packet*)buff, ival, &read_param);
     }else usleep(1000*100);
@@ -372,7 +371,7 @@ int Network_echo_request(struct network *nwk, uint16_t address, int count, int d
 	if(datalen > NWK_ECHO_LENGTH_MAX) datalen = NWK_ECHO_LENGTH_MAX;
 	req->length = datalen;
 
-	nwk->look 		= 1;
+	nwk->lock 		= 1;
 	usleep(1000* 200);
 	clock_gettime(CLOCK_REALTIME, &t_ref);
 	while(count -- && kb_value() != 0x03){
@@ -410,7 +409,7 @@ int Network_echo_request(struct network *nwk, uint16_t address, int count, int d
 		}
 		if(failed_cnt > 10) break;
 	}
-	nwk->look = 0;
+	nwk->lock = 0;
 	clock_gettime(CLOCK_REALTIME, &t_now);
 	info->time_diff = t_now.tv_sec * 1000 + t_now.tv_nsec / 1000000 - (t_ref.tv_sec * 1000 + t_ref.tv_nsec / 1000000);
 	ret = (failed_cnt > 10) ? -1:0;

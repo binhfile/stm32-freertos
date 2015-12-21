@@ -11,9 +11,6 @@
 #include <flag_event.h>
 #include <unistd.h>
 
-#include "FreeRTOS.h"
-#include "task.h"
-volatile TickType_t t_profile_ref, t_profile_now;
 
 int	App_Initialize(){
 

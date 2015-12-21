@@ -16,13 +16,13 @@
 //#define MAC_PRINT_TX  1
 //#define MAC_PRINT_RX  1
 
-struct __attribute__((packed)) mac_mrf24j40_open_param{
+struct mac_mrf24j40_open_param{
     int fd_spi;
     int fd_cs;
     int fd_reset;
     int fd_intr;
 };
-struct __attribute__((packed)) mac_mrf24j40_write_param {
+struct mac_mrf24j40_write_param {
     uint64_t destAddress;
     uint16_t destPANId;
     union{
@@ -40,7 +40,7 @@ struct __attribute__((packed)) mac_mrf24j40_write_param {
     uint8_t srcAddressMode;
     uint8_t destAddressMode;
 };
-struct __attribute__((packed)) phy_mrf24j40{
+struct phy_mrf24j40{
     int fd_spi;
     int fd_cs;
     int fd_reset;
@@ -55,20 +55,20 @@ struct __attribute__((packed)) phy_mrf24j40{
 #define MAC_MRF24J40_WRITE_MAX_ITEMS            (3)
 #define MAC_MRF24J40_READ_PAYLOAD_MAX_LENGTH    (100)
 #define MAC_MRF24J40_READ_MAX_ITEMS             (3)
-struct __attribute__((packed)) mac_mrf24j40_write_item{
+struct mac_mrf24j40_write_item{
     struct mac_mrf24j40_write_param param;
     uint8_t flags;
     uint8_t payload_len;
     uint8_t payload[MAC_MRF24J40_WRITE_PAYLOAD_MAX_LENGTH];
 };
-struct __attribute__((packed)) mac_mrf24j40_read_item{
+struct mac_mrf24j40_read_item{
     uint8_t flags;
     uint8_t payload_len;
     uint8_t payload[144];
 };
 #define MAC_MRF24J40_FLAG_TX_DONE   0
 #define MAC_MRF24J40_FLAG_RX_DONE   1
-struct __attribute__((packed)) mac_mrf24j40{
+struct mac_mrf24j40{
     uint64_t        networkAddress;
     struct phy_mrf24j40 phy;
     uint8_t         txSeq;
@@ -109,11 +109,11 @@ enum mac_iee802154_addrmode{
     mac_iee802154_addrmode_16bit = 0x02,
     mac_iee802154_addrmode_64bit = 0x03
 };
-struct __attribute__((packed)) mac_channel_assessment{
+struct mac_channel_assessment{
     uint8_t assessment_mode;
     uint8_t noise_level;
 };
-struct __attribute__((packed)) mac_mrf24j40_read_param {
+struct mac_mrf24j40_read_param {
     uint8_t                         frame_len;
     struct mac_ieee802154_frm_ctrl  frame_ctrl;
     uint8_t                         seq;

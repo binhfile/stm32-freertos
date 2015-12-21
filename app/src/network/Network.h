@@ -11,8 +11,8 @@
 #include <stdint.h>
 #include <semaphore.h>
 #include "network/mac/mac_mrf24j40.h"
-#define NWK_LOOK(nwk) (nwk)->look = 1
-#define NWK_UNLOOK(nwk) (nwk)->look = 0
+#define NWK_LOOK(nwk) (nwk)->lock = 1
+#define NWK_UNLOOK(nwk) (nwk)->lock = 0
 enum network_packet_type{
 	network_packet_type_beacon_req = 1,
 	network_packet_type_beacon_res,
@@ -30,7 +30,7 @@ struct  __attribute__((packed)) network_packet{
 };
 struct network{
 	struct mac_mrf24j40 *mac;
-	int look;
+	int lock;
 };
 struct network_beacon_info{
 	uint16_t panId;

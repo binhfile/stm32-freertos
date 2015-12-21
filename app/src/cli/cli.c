@@ -5,6 +5,7 @@
  *      Author: dev
  */
 
+#include "project_config.h"
 #include "cli.h"
 #include <lib_cli.h>
 #include <stdarg.h>
@@ -16,16 +17,14 @@
 #include <stdlib.h>
 #include <time.h>
 
-#include <drv_api.h>
-#include <drv_gpio.h>
-
 extern sem_t              			g_sem_debug;
 extern mqd_t              			g_debug_tx_buffer;
-extern int                 			g_fd_debug;
+extern int                 			g_fd_debug_rx;
+extern int                 			g_fd_debug_tx;
 
 extern struct cli_app_info *___cli_app_begin;
 extern struct cli_app_info *___cli_app_end;
-
+#if defined(OS_FREERTOS)
 void LREP(char* s, ...){
     char szBuffer[128];
     int len;
@@ -38,6 +37,21 @@ void LREP(char* s, ...){
     mq_send(g_debug_tx_buffer, szBuffer, len, 0);
     sem_post(&g_sem_debug);
 }
+#elif defined(OS_LINUX)
+#include <stdio.h>
+void LREP(char* s, ...){
+    char szBuffer[128];
+    int len;
+    va_list arglist;
+    va_start(arglist, s);
+    memset(szBuffer, 0, 128);
+    vsnprintf(szBuffer, 127, s, arglist);
+    len = strlen(szBuffer);
+    sem_wait(&g_sem_debug);
+    printf("%s", szBuffer);fflush(stdout);
+    sem_post(&g_sem_debug);
+}
+#endif
 void CLI_display_help(){
 	struct cli_app_info **app;
 	LREP("\r\n");
@@ -86,8 +100,8 @@ const char g_cli_baner[] = "\r\n"\
 int CLI_loop(){
     struct lib_cli libcli;
     lib_cli_init(&libcli);
-    lib_cli_set_readfd(&libcli, g_fd_debug);
-    lib_cli_set_writefd(&libcli, g_fd_debug);
+    lib_cli_set_readfd(&libcli, g_fd_debug_rx);
+    lib_cli_set_writefd(&libcli, g_fd_debug_tx);
     lib_cli_set_promptchar(&libcli, '$');
     lib_cli_set_hostname(&libcli, "cli");
     lib_cli_set_banner(&libcli, g_cli_baner);

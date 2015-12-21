@@ -5,9 +5,10 @@
  *      Author: dev
  */
 #include <at93c.h>
-#include <drv_gpio.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <stdint.h>
+#include "gpio.h"
 
 #define DRV_AT93C_SET_GPIO(fd, val)	{\
 	u8val = val;\
