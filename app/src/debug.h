@@ -1,7 +1,6 @@
 #ifndef DEBUG_H__
 #define DEBUG_H__
 #include <stdint.h>
-
 enum LED{
 	LED_GREEN = 0,
 	LED_RED,
@@ -9,7 +8,8 @@ enum LED{
 	LED_ORANGE
 };
 #if defined(STM32F4XX)
-
+#include <gpio.h>
+#include <fcntl.h>
 extern int g_fd_led[];
 #define LED_ON(led) {uint8_t val = 1; write(g_fd_led[LED_##led], &val, 1);}
 #define LED_OFF(led) {uint8_t val = 0; write(g_fd_led[LED_##led], &val, 1);}

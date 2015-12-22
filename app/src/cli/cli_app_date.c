@@ -8,8 +8,8 @@
 #include <cli.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <Network.h>
 #include <string.h>
+#include <time.h>
 
 const char cli_app_date_description[] = "Print or set the system date and time";
 

@@ -4,6 +4,7 @@
 #include <Network.h>
 #include <string.h>
 #include <getopt.h>
+#include <fcntl.h>
 #include "project_config.h"
 
 const char cli_app_test_description[] = "Test system";

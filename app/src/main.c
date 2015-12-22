@@ -30,7 +30,6 @@ int                 g_fd_led[4]         = {-1};
 int                 g_fd_button         = -1;
 int					g_fd_rtc			= -1;
 void *Thread_DebugTX(void*);
-void HW_Initalize();
 #elif defined(OS_LINUX)
 #define             APP_THREAD_COUNT    	4
 #endif
@@ -51,7 +50,6 @@ struct network				g_nwk;
 struct setting_device       g_setting_dev;
 struct setting_value		g_setting;
 
-extern int board_register_devices();
 int g_thread_index = 1;
 #if defined(OS_FREERTOS)
 #define DEFINE_THREAD(fxn, stack_size, priority) {\
@@ -95,13 +93,9 @@ uint8_t kb_value(){
     if(len <= 0) u8val = 0;
     return u8val;
 }
-
 int main(void)
 {
-    int i;    
-#if defined(STM32F4XX)
-    HW_Initalize();
-#endif
+    int i;
 #if defined(OS_FREERTOS)
     g_debug_tx_buffer = mq_open(0, 512);
 #elif defined(OS_LINUX)
@@ -113,7 +107,7 @@ int main(void)
     sem_init(&g_sem_debug_rx, 0, 0);
 //    sem_init(&g_mimac_access, 0, 1);
 #if defined(OS_FREERTOS)
-    pthread_attr_setstacksize(&g_thread_attr[0], configMINIMAL_STACK_SIZE*32);
+    pthread_attr_setstacksize(&g_thread_attr[0], configMINIMAL_STACK_SIZE*64);
     pthread_setschedprio(&g_thread[0], tskIDLE_PRIORITY + 1UL);
 #endif
     pthread_create(&g_thread[0], &g_thread_attr[0], Thread_Startup, 0);
@@ -140,9 +134,6 @@ void *Thread_Startup(void *pvParameters){
     unsigned int uival;
     uint8_t u8aVal[32];
 #if defined(OS_FREERTOS)
-    // register drivers & devices
-    driver_probe();
-    board_register_devices();
     // open gpio
     g_fd_led[0] = open("led-green", 0);
     g_fd_led[1] = open("led-red",   0);
@@ -215,9 +206,6 @@ void *Thread_Startup(void *pvParameters){
         uival = SPI_MODE_0;
         if(ioctl(rf_mac_init.fd_spi, SPI_IOC_WR_MODE, (unsigned int)&uival) != 0) LREP("ioctl spi mode failed\r\n");
         uival = 15000000;
-#if defined(OS_LINUX)
-        uival = 500000;
-#endif
         if(ioctl(rf_mac_init.fd_spi, SPI_IOC_WR_MAX_SPEED_HZ, (unsigned int)&uival) != 0) LREP("ioctl spi speed failed\r\n");
         else{
             //uival = 0;
@@ -282,7 +270,9 @@ void *Thread_Startup(void *pvParameters){
         sem_post(&g_thread_startup[i]);
     }
     usleep(1000* 100);
+
     LREP("\r\nHit any key to break boot sequence");
+
     uint8_t timeout = 3;
     uint8_t input = 0;
     while(timeout-- && input == 0){
@@ -294,6 +284,7 @@ void *Thread_Startup(void *pvParameters){
     	while(1){sleep(1);}
     }
     LREP("DONE\r\n");
+
     setting_read(&g_setting_dev, &g_setting);
     LREP("Setting:\r\n");
     setting_dump_to_stdio(&g_setting);
@@ -470,7 +461,6 @@ void *Thread_MiwiTask(void* pvParameters){
     sem_t* sem_startup = (sem_t*)pvParameters;
 
     sem_wait(sem_startup);
-    //LREP("Thread MiwiTask is running\r\n");
     while(1){
         if(MAC_mrf24j40_select(&g_rf_mac, 100)){
             MAC_mrf24j40_task(&g_rf_mac);
@@ -487,17 +477,5 @@ void *Thread_DebugRX(void* pvParameters){
     }
     return 0;
 }
-#if defined(STM32F4XX)
-/**
- * Init HW
- */
-/* Board includes */
-#include "stm32f4_discovery.h"
-#include "stm32f4xx_rcc.h"
-void HW_Initalize()
-{
-    NVIC_PriorityGroupConfig(NVIC_PriorityGroup_4);
-}
-#endif
 
 

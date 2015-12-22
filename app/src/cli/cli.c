@@ -24,34 +24,23 @@ extern int                 			g_fd_debug_tx;
 
 extern struct cli_app_info *___cli_app_begin;
 extern struct cli_app_info *___cli_app_end;
+void LREP(char* s, ...){
+    char szBuffer[128];
+    int len;
+    va_list arglist;
+    va_start(arglist, s);
+    memset(szBuffer, 0, 128);
+    vsnprintf(szBuffer, 127, s, arglist);
+    len = strlen(szBuffer);
+    sem_wait(&g_sem_debug);
 #if defined(OS_FREERTOS)
-void LREP(char* s, ...){
-    char szBuffer[128];
-    int len;
-    va_list arglist;
-    va_start(arglist, s);
-    memset(szBuffer, 0, 128);
-    vsnprintf(szBuffer, 127, s, arglist);
-    len = strlen(szBuffer);
-    sem_wait(&g_sem_debug);
     mq_send(g_debug_tx_buffer, szBuffer, len, 0);
-    sem_post(&g_sem_debug);
-}
 #elif defined(OS_LINUX)
-#include <stdio.h>
-void LREP(char* s, ...){
-    char szBuffer[128];
-    int len;
-    va_list arglist;
-    va_start(arglist, s);
-    memset(szBuffer, 0, 128);
-    vsnprintf(szBuffer, 127, s, arglist);
-    len = strlen(szBuffer);
-    sem_wait(&g_sem_debug);
     printf("%s", szBuffer);fflush(stdout);
+
+#endif
     sem_post(&g_sem_debug);
 }
-#endif
 void CLI_display_help(){
 	struct cli_app_info **app;
 	LREP("\r\n");

@@ -193,7 +193,14 @@ static void SetSysClock(void);
 /** @addtogroup STM32F4xx_System_Private_Functions
   * @{
   */
-
+#include "stm32f4_discovery.h"
+#include "stm32f4xx_rcc.h"
+#include <drv_api.h>
+extern int board_register_devices();
+void HW_Initalize()
+{
+    NVIC_PriorityGroupConfig(NVIC_PriorityGroup_4);
+}
 /**
   * @brief  Setup the microcontroller system
   *         Initialize the Embedded Flash Interface, the PLL and update the 
@@ -236,6 +243,10 @@ void SystemInit(void)
 #else
   SCB->VTOR = FLASH_BASE | VECT_TAB_OFFSET; /* Vector Table Relocation in Internal FLASH */
 #endif
+  HW_Initalize();
+  // register drivers & devices
+  driver_probe();
+  board_register_devices();
 }
 
 /**
