@@ -19,12 +19,11 @@
 #include <cli.h>
 #include <debug.h>
 
-void *Thread_DebugRX(void*);
-void *Thread_RFIntr(void*);
+void *Thread_ExtInput(void*);
 void *Thread_MiwiTask(void*);
 
 #if defined(OS_FREERTOS)
-#define             APP_THREAD_COUNT    	4
+#define             APP_THREAD_COUNT    	3
 int                 g_fd_led[4]         = {-1};
 int                 g_fd_button         = -1;
 int					g_fd_rtc			= -1;
@@ -39,7 +38,7 @@ void *Thread_DebugTX(void*);
     pthread_create(&thread_##fxn, &thread_attr_##fxn, fxn, 0);\
 }
 #elif defined(OS_LINUX)
-#define             APP_THREAD_COUNT    	3
+#define             APP_THREAD_COUNT    	2
 #define DEFINE_THREAD(fxn, stack_size, priority) \
 	pthread_t thread_##fxn;\
 	{\
@@ -53,41 +52,16 @@ sem_t				g_sem_debug_rx;
 int                 g_fd_debug_tx          	= -1;
 int                 g_fd_debug_rx          	= -1;
 
-struct mac_mrf24j40_open_param  rf_mac_init;
+struct mac_mrf24j40_open_param  g_rf_mac_open;
 struct mac_mrf24j40         	g_rf_mac;
 struct network					g_nwk;
 struct setting_device       	g_setting_dev;
 struct setting_value			g_setting;
 
-uint8_t kbhit(int timeout){
-    int8_t u8val = 0;
-    int len;
-    fd_set readfs;
-    struct timeval s_timeout;
-
-    FD_ZERO(&readfs);
-    FD_SET(g_fd_debug_rx, &readfs);
-    s_timeout.tv_sec  = timeout/1000;
-    s_timeout.tv_usec = (timeout%1000)*1000;
-
-	len = select(g_fd_debug_rx+1, &readfs, 0, 0, &s_timeout);
-	if(len > 0){
-		if(FD_ISSET(g_fd_debug_rx, &readfs)){
-			len = read(g_fd_debug_rx, &u8val, 1);
-			if(len <= 0){
-				u8val = 0;
-			}
-		}
-	}
-	return u8val;
+uint8_t g_kb_value = 0;
+inline uint8_t kb_value(){
+    return g_kb_value;
 }
-uint8_t kb_value(){
-    uint8_t u8val = 0;
-    int len = read(g_fd_debug_rx, &u8val, 1);
-    if(len <= 0) u8val = 0;
-    return u8val;
-}
-
 int main(void)
 {
     int i, ival;
@@ -155,12 +129,12 @@ int main(void)
                 g_setting_dev.dev.fd_cs, g_setting_dev.dev.fd_sck,
                 g_setting_dev.dev.fd_mosi, g_setting_dev.dev.fd_miso);
     }
-    rf_mac_init.fd_cs = open(DEV_RF_CS_NAME, O_WRONLY);
-    if(rf_mac_init.fd_cs < 0) LREP("open spi cs device failed\r\n");
-    rf_mac_init.fd_reset = open(DEV_RF_RESET_NAME, O_WRONLY);
-    if(rf_mac_init.fd_reset < 0) LREP("open rf-reset device failed\r\n");
-    rf_mac_init.fd_intr = open(DEV_RF_INTR_NAME, O_RDONLY);
-    if(rf_mac_init.fd_intr < 0) LREP("open rf-intr device failed\r\n");
+    g_rf_mac_open.fd_cs = open(DEV_RF_CS_NAME, O_WRONLY);
+    if(g_rf_mac_open.fd_cs < 0) LREP("open spi cs device failed\r\n");
+    g_rf_mac_open.fd_reset = open(DEV_RF_RESET_NAME, O_WRONLY);
+    if(g_rf_mac_open.fd_reset < 0) LREP("open rf-reset device failed\r\n");
+    g_rf_mac_open.fd_intr = open(DEV_RF_INTR_NAME, O_RDONLY);
+    if(g_rf_mac_open.fd_intr < 0) LREP("open rf-intr device failed\r\n");
 #elif defined(OS_LINUX)
     g_fd_debug_tx = STDOUT_FILENO;
     g_fd_debug_rx = STDIN_FILENO;
@@ -200,48 +174,48 @@ int main(void)
 		write(_fd, "out", 3);
 		close(_fd);
 	}
-    rf_mac_init.fd_cs = open("/sys/class/gpio/gpio7/value", O_WRONLY);
-    if(rf_mac_init.fd_cs < 0) LREP("open spi cs device failed\r\n");
-    rf_mac_init.fd_reset = open("/sys/class/gpio/gpio22/value", O_WRONLY);
-    if(rf_mac_init.fd_reset < 0) LREP("open rf-reset device failed\r\n");
-    rf_mac_init.fd_intr = open("/sys/class/gpio/gpio17/value", O_RDONLY);
-    if(rf_mac_init.fd_intr < 0) LREP("open rf-intr device failed\r\n");
+    g_rf_mac_open.fd_cs = open("/sys/class/gpio/gpio7/value", O_WRONLY);
+    if(g_rf_mac_open.fd_cs < 0) LREP("open spi cs device failed\r\n");
+    g_rf_mac_open.fd_reset = open("/sys/class/gpio/gpio22/value", O_WRONLY);
+    if(g_rf_mac_open.fd_reset < 0) LREP("open rf-reset device failed\r\n");
+    g_rf_mac_open.fd_intr = open("/sys/class/gpio/gpio17/value", O_RDONLY);
+    if(g_rf_mac_open.fd_intr < 0) LREP("open rf-intr device failed\r\n");
 #endif
-    rf_mac_init.fd_spi = open(DEV_RF_NAME, O_RDWR);
-    if(rf_mac_init.fd_spi < 0){
-        LREP("open spi device '%s' failed %d\r\n", DEV_RF_NAME, rf_mac_init.fd_spi);
+    g_rf_mac_open.fd_spi = open(DEV_RF_NAME, O_RDWR);
+    if(g_rf_mac_open.fd_spi < 0){
+        LREP("open spi device '%s' failed %d\r\n", DEV_RF_NAME, g_rf_mac_open.fd_spi);
     }
     else{
         uival = SPI_MODE_0;
-        if(ioctl(rf_mac_init.fd_spi, SPI_IOC_WR_MODE, (unsigned int)&uival) != 0) LREP("ioctl spi mode failed\r\n");
+        if(ioctl(g_rf_mac_open.fd_spi, SPI_IOC_WR_MODE, (unsigned int)&uival) != 0) LREP("ioctl spi mode failed\r\n");
         uival = 15000000;
-        if(ioctl(rf_mac_init.fd_spi, SPI_IOC_WR_MAX_SPEED_HZ, (unsigned int)&uival) != 0) LREP("ioctl spi speed failed\r\n");
+        if(ioctl(g_rf_mac_open.fd_spi, SPI_IOC_WR_MAX_SPEED_HZ, (unsigned int)&uival) != 0) LREP("ioctl spi speed failed\r\n");
     }
 
     g_nwk.mac = &g_rf_mac;
     // Miwi network
-    MAC_mrf24j40_open(&g_rf_mac, &rf_mac_init);
+    MAC_mrf24j40_open(&g_rf_mac, &g_rf_mac_open);
     Network_init(&g_nwk);
     srand(0);
 
 #if defined(OS_FREERTOS)
-    DEFINE_THREAD(Thread_DebugTX, 1024, tskIDLE_PRIORITY + 1UL);
+    DEFINE_THREAD(Thread_DebugTX,  1024, tskIDLE_PRIORITY + 1UL);
 #endif
-    DEFINE_THREAD(Thread_RFIntr,  2048, tskIDLE_PRIORITY + 3UL);
-    DEFINE_THREAD(Thread_MiwiTask,2048, tskIDLE_PRIORITY + 4UL);
-    DEFINE_THREAD(Thread_DebugRX, 2048, tskIDLE_PRIORITY + 1UL);
+    DEFINE_THREAD(Thread_ExtInput, 2048, tskIDLE_PRIORITY + 3UL);
+    DEFINE_THREAD(Thread_MiwiTask, 2048, tskIDLE_PRIORITY + 4UL);
     usleep(1000* 100);
 
     LREP("\r\nHit any key to break boot sequence");
 
-    uint8_t timeout = 3;
+    uint8_t timeout = 30;
     uint8_t input = 0;
     while(timeout-- && input == 0){
-    	LREP(".");
-    	input = kbhit(1000);
+    	if(timeout % 10 == 0)
+    		LREP(".");
+    	input = kb_value();
+    	if(input == 0) usleep(1000* 100);
     }
     if(input != 0){
-    	CLI_loop();
     	while(1){sleep(1);}
     }
     LREP("DONE\r\n");
@@ -346,13 +320,12 @@ int main(void)
     	}
     }else{
     	LREP("Type invalid\r\n");
-    	CLI_loop();
+    	while(1){sleep(1);}
     }
 
-    sem_post(&g_sem_debug_rx);
     while(1){
     	Network_loop(&g_nwk, 100);
-        LED_TOGGLE(GREEN);
+        LED_TOGGLE(BLUE);
     }
     return 0;
 }
@@ -368,68 +341,53 @@ void *Thread_DebugTX(void* param){
     }
 }
 #endif
-void *Thread_RFIntr(void *param){
-    int len;
+void *Thread_ExtInput(void *param){
+    int len, fd;
     fd_set readfs;
     struct timeval timeout;
+    unsigned char buff[32];
     
-#if defined(OS_FREERTOS)
-    FD_CLR(rf_mac_init.fd_intr, &readfs);
+    FD_ZERO(&readfs);
+    FD_SET(g_rf_mac_open.fd_intr, &readfs);
+    FD_SET(g_fd_debug_rx, &readfs);
+    FD_SET(g_fd_button, &readfs);
     timeout.tv_sec      = 1;
     timeout.tv_usec     = 0;
 
-    while (1) {        
-        len = select(rf_mac_init.fd_intr+1, &readfs, 0, 0, &timeout);
+    fd = g_rf_mac_open.fd_intr;
+    if(fd < g_fd_debug_rx) fd = g_fd_debug_rx;
+    if(fd < g_fd_button) fd = g_fd_button;
+    CLI_start();
+    while (1) {
+        len = select(fd+1, &readfs, 0, 0, &timeout);
         if(len > 0){
-            if(FD_ISSET(rf_mac_init.fd_intr, &readfs)){
+            if(FD_ISSET(g_rf_mac_open.fd_intr, &readfs)){
                 MAC_mrf24j40_ioctl(&g_rf_mac, mac_mrf24j40_ioc_trigger_interrupt, 0);
             }
+            if(FD_ISSET(g_fd_debug_rx, &readfs)){
+				len = read(g_fd_debug_rx, buff, 32);
+				if(len > 0){
+					g_kb_value = buff[0];
+					CLI_process(buff, len);
+				}
+			}
+			if(FD_ISSET(g_fd_button, &readfs)){
+				LREP("\r\nbutton pressed\r\n");
+			}
         }else if(len == 0){
+        	LED_TOGGLE(GREEN);
         }else{
             LREP("select intr pin failed.\r\n");
             break;
         }
     }
     while(1){sleep(1);}
-#elif defined(OS_LINUX)
-	struct pollfd pfd;
-	char rdbuf[5];
-	int ret;
-	pfd.fd=rf_mac_init.fd_intr;
-	pfd.events=POLLPRI;
-	while(1) {
-		lseek(rf_mac_init.fd_intr, 0, SEEK_SET);
-		ret=poll(&pfd, 1, 1000);
-		if(ret<0) {
-			perror("poll()");
-			close(rf_mac_init.fd_intr);
-			break;
-		}
-		if(ret==0) {
-			//LREP("timeout\n");
-			continue;
-		}
-		ret=read(rf_mac_init.fd_intr, rdbuf, 5-1);
-		if(ret<0) {
-			perror("read()");
-			return 0;
-		}
-		MAC_mrf24j40_ioctl(&g_rf_mac, mac_mrf24j40_ioc_trigger_interrupt, 0);
-	}
-#endif
 }
 void *Thread_MiwiTask(void*param){
     while(1){
         if(MAC_mrf24j40_select(&g_rf_mac, 100)){
             MAC_mrf24j40_task(&g_rf_mac);
         }
-    }
-    return 0;
-}
-void *Thread_DebugRX(void*param){
-    sem_wait(&g_sem_debug_rx);
-    while(1){
-    	CLI_loop();
     }
     return 0;
 }

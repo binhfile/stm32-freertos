@@ -21,6 +21,7 @@ extern sem_t              			g_sem_debug;
 extern mqd_t              			g_debug_tx_buffer;
 extern int                 			g_fd_debug_rx;
 extern int                 			g_fd_debug_tx;
+extern int                 			g_fd_button;
 
 extern struct cli_app_info *___cli_app_begin;
 extern struct cli_app_info *___cli_app_end;
@@ -86,17 +87,19 @@ const char g_cli_baner[] = "\r\n"\
 \\    /\r\n\
 /_  _\\\r\n\
   \\/\r\n";
-int CLI_loop(){
-    struct lib_cli libcli;
+struct lib_cli libcli;
+int CLI_start(){
     lib_cli_init(&libcli);
-    lib_cli_set_readfd(&libcli, g_fd_debug_rx);
     lib_cli_set_writefd(&libcli, g_fd_debug_tx);
     lib_cli_set_promptchar(&libcli, '$');
     lib_cli_set_hostname(&libcli, "cli");
     lib_cli_set_banner(&libcli, g_cli_baner);
     lib_cli_register_callback(&libcli, CLI_callback, &libcli);
-    while(1){
-    	lib_cli_loop(&libcli, 1000);
-    }
+
+    lib_cli_start(&libcli);
+    return 0;
+}
+void CLI_process(void* data, int len){
+	lib_cli_process(&libcli, data, len);
 }
 // end of text

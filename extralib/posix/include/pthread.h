@@ -15,6 +15,8 @@ typedef struct {
     void *arg;
     unsigned char prio;
     TaskHandle_t handle;
+
+    void* next;
 }pthread_t;
 
 /* Create a new thread, starting with execution of START-ROUTINE
@@ -47,7 +49,7 @@ int pthread_create (pthread_t * __newthread,
 
 
 /* Obtain the identifier of the current thread.  */
-// pthread_t pthread_self (void);
+pthread_t pthread_self (void);
 
 /* Compare two thread identifiers.  */
 // int pthread_equal (pthread_t __thread1, pthread_t __thread2);

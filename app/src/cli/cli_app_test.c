@@ -9,7 +9,7 @@
 
 const char cli_app_test_description[] = "Test system";
 
-extern struct mac_mrf24j40_open_param  rf_mac_init;
+extern struct mac_mrf24j40_open_param  g_rf_mac_open;
 extern struct mac_mrf24j40         g_rf_mac;
 
 int cli_app_test_callback(int argc, char** argv, void* user);
@@ -39,11 +39,11 @@ int cli_app_test_callback(int argc, char** argv, void* user){
 				if(strcmp(argv[2], "set") == 0){
 					LREP("\r\nSet RF-RESET signal\r\n");
 					uint8_t __u8val = '1';
-					write(rf_mac_init.fd_reset, &__u8val, 1);
+					write(g_rf_mac_open.fd_reset, &__u8val, 1);
 				}else if(strcmp(argv[2], "clear") == 0){
 					LREP("\r\nClear RF-RESET signal\r\n");
 					uint8_t __u8val = '0';
-					write(rf_mac_init.fd_reset, &__u8val, 1);
+					write(g_rf_mac_open.fd_reset, &__u8val, 1);
 				}
 			}
 		}
@@ -52,11 +52,11 @@ int cli_app_test_callback(int argc, char** argv, void* user){
 				if(strcmp(argv[2], "set") == 0){
 					LREP("\r\nSet RF-CS signal\r\n");
 					uint8_t __u8val = '1';
-					write(rf_mac_init.fd_cs, &__u8val, 1);
+					write(g_rf_mac_open.fd_cs, &__u8val, 1);
 				}else if(strcmp(argv[2], "clear") == 0){
 					LREP("\r\nClear RF-CS signal\r\n");
 					uint8_t __u8val = '0';
-					write(rf_mac_init.fd_cs, &__u8val, 1);
+					write(g_rf_mac_open.fd_cs, &__u8val, 1);
 				}
 			}
 		}

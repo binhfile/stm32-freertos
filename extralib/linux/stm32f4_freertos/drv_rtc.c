@@ -21,7 +21,6 @@ int 	rtc_close	(struct platform_device *dev);
 int		rtc_read	(struct platform_device *dev, void* buf, int count);
 int		rtc_write	(struct platform_device *dev, const void* buf, int count);
 int		rtc_ioctl	(struct platform_device *dev, int request, unsigned int arguments);
-int		rtc_select	(struct platform_device *device, int *readfd, int *writefd, int *exceptfd, int timeout);
 
 static struct platform_driver g_rtc_driver = {
 	.driver		= {
@@ -40,7 +39,7 @@ static struct platform_driver g_rtc_driver = {
 	.read 		= &rtc_read,
 	.write 		= &rtc_write,
 	.ioctl 		= &rtc_ioctl,
-	.select		= &rtc_select,
+	.select		= 0,
 
 	.next 		= 0,
 };
@@ -166,11 +165,6 @@ int		rtc_ioctl	(struct platform_device *dev, int request, unsigned int arguments
 			break;
 		}
 	}
-	return ret;
-}
-int		rtc_select	(struct platform_device *device, int *readfd, int *writefd, int *exceptfd, int timeout){
-	int ret = 0;
-
 	return ret;
 }
 // end of file

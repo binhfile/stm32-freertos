@@ -60,6 +60,7 @@ int platform_device_register(struct platform_device *pdev){
 		}
 		pdev->next = 0;
 		pdev->driver = drv;
+		pdev->i_event = 0;
 		ret = 0;
 	}
 	return ret;
@@ -74,43 +75,6 @@ int driver_probe(){
     return 0;
 }
 int open(const char *pathname, int flags){
-#if 0
-	int ret = -EPERM;
-	struct platform_driver *drv = g_list_drivers;
-	struct platform_device *pdev = 0;
-	int found = 0;
-	int drv_index = 0;
-	int dev_index = 0;
-
-	if(!g_list_drivers) {
-		return ret;
-	}
-	while(drv){
-		dev_index = 0;
-		pdev = drv->driver.devices;
-		while(pdev){
-			if(strcmp(pdev->dev_name, pathname) == 0){
-				found = 1;
-				break;
-			}
-			pdev = pdev->next;
-			dev_index++;
-		}
-		if(found) break;
-		drv = drv->next;
-		drv_index++;
-	}
-	if(found){
-		found = drv->open(pdev, flags);
-		if(found >= 0){
-			ret = ((((uint16_t)(drv_index)) & 0x00FF) << 8) | (((uint16_t)dev_index) & 0x00FF);
-		}else{
-			ret = -EPERM;
-		}
-	}else{
-	}
-	return ret;
-#else
 	int ret = -EPERM;
 	struct platform_driver *drv = 0;
 	struct platform_device **pdev = (struct platform_device **)&___dev_lookup_begin;
@@ -136,38 +100,8 @@ int open(const char *pathname, int flags){
 	}else{
 	}
 	return ret;
-#endif
 }
 int 	close	(int fd){
-#if 0
-	int ret = -EPERM;
-	struct platform_driver *drv = g_list_drivers;
-	struct platform_device *pdev = 0;
-	int drv_index = 0;
-	int dev_index = 0;
-
-	drv_index = (((uint16_t)fd) & 0xFF00) >> 8;
-	dev_index = (((uint16_t)fd) & 0x00FF);
-
-	while(drv_index > 0){
-		if(drv){
-			drv = drv->next;
-		}else break;
-		drv_index --;
-	}
-	if(drv_index > 0 || !drv) return ret;
-	pdev = drv->driver.devices;
-	while(dev_index){
-		if(pdev){
-			pdev = pdev->next;
-		}else break;
-		dev_index--;
-	}
-	if(dev_index > 0 || !pdev) return ret;
-	if(drv->close)
-		ret = drv->close(pdev);
-	return ret;
-#else
 	int ret = -EPERM;
 	struct platform_driver *drv = 0;
 	struct platform_device **pdev = (struct platform_device **)&___dev_lookup_begin;
@@ -178,38 +112,8 @@ int 	close	(int fd){
 			ret = drv->close(pdev[fd]);
 	}
 	return ret;
-#endif
 }
 int 	write	(int fd, const void *buf, size_t count){
-#if 0
-	int ret = -EPERM;
-	struct platform_driver *drv = g_list_drivers;
-	struct platform_device *pdev = 0;
-	int drv_index = 0;
-	int dev_index = 0;
-
-	drv_index = (((uint16_t)fd) & 0xFF00) >> 8;
-	dev_index = (((uint16_t)fd) & 0x00FF);
-
-	while(drv_index > 0){
-		if(drv){
-			drv = drv->next;
-		}else break;
-		drv_index --;
-	}
-	if(drv_index > 0 || !drv) return ret;
-	pdev = drv->driver.devices;
-	while(dev_index){
-		if(pdev){
-			pdev = pdev->next;
-		}else break;
-		dev_index--;
-	}
-	if(dev_index > 0 || !pdev) return ret;
-	if(drv->write)
-		ret = drv->write(pdev, buf, count);
-	return ret;
-#else
 	int ret = -EPERM;
 	struct platform_driver *drv = 0;
 	struct platform_device **pdev = (struct platform_device **)&___dev_lookup_begin;
@@ -220,38 +124,8 @@ int 	write	(int fd, const void *buf, size_t count){
 			ret = drv->write(pdev[fd], buf, count);
 	}
 	return ret;
-#endif
 }
 int 	read	(int fd, void *buf, size_t count){
-#if 0
-	int ret = -EPERM;
-	struct platform_driver *drv = g_list_drivers;
-	struct platform_device *pdev = 0;
-	int drv_index = 0;
-	int dev_index = 0;
-
-	drv_index = (((uint16_t)fd) & 0xFF00) >> 8;
-	dev_index = (((uint16_t)fd) & 0x00FF);
-
-	while(drv_index > 0){
-		if(drv){
-			drv = drv->next;
-		}else break;
-		drv_index --;
-	}
-	if(drv_index > 0 || !drv) return ret;
-	pdev = drv->driver.devices;
-	while(dev_index){
-		if(pdev){
-			pdev = pdev->next;
-		}else break;
-		dev_index--;
-	}
-	if(dev_index > 0 || !pdev) return ret;
-	if(drv->read)
-		ret = drv->read(pdev, buf, count);
-	return ret;
-#else
 	int ret = -EPERM;
 	struct platform_driver *drv = 0;
 	struct platform_device **pdev = (struct platform_device **)&___dev_lookup_begin;
@@ -262,38 +136,8 @@ int 	read	(int fd, void *buf, size_t count){
 			ret = drv->read(pdev[fd], buf, count);
 	}
 	return ret;
-#endif
 }
 int 	ioctl	(int fd, int request, unsigned int arguments){
-#if 0
-	int ret = -EPERM;
-	struct platform_driver *drv = g_list_drivers;
-	struct platform_device *pdev = 0;
-	int drv_index = 0;
-	int dev_index = 0;
-
-	drv_index = (((uint16_t)fd) & 0xFF00) >> 8;
-	dev_index = (((uint16_t)fd) & 0x00FF);
-	
-	while(drv_index > 0){
-		if(drv){
-			drv = drv->next;
-		}else break;
-		drv_index --;
-	}
-	if(drv_index > 0 || !drv) return ret;
-	pdev = drv->driver.devices;
-	while(dev_index){
-		if(pdev){
-			pdev = pdev->next;
-		}else break;
-		dev_index--;
-	}
-	if(dev_index > 0 || !pdev) return ret;
-	if(drv->ioctl)
-		ret = drv->ioctl(pdev, request, arguments);
-	return ret;
-#else
 	int ret = -EPERM;
 	struct platform_driver *drv = 0;
 	struct platform_device **pdev = (struct platform_device **)&___dev_lookup_begin;
@@ -304,112 +148,104 @@ int 	ioctl	(int fd, int request, unsigned int arguments){
 			ret = drv->ioctl(pdev[fd], request, arguments);
 	}
 	return ret;
-#endif
 }
 int 	select(int fd, fd_set *readfds, fd_set *writefds,
 		  fd_set *exceptfds, struct timeval *timeout){
-#if 0
 	int ret = -EPERM;
-	struct platform_driver *drv = g_list_drivers;
-	struct platform_device *pdev = 0;
-	int drv_index = 0;
-	int dev_index = 0;
-	int readfd = 0, writefd = 0, errorfd = 0;
-	int s_timeout = 0;
-
-	drv_index = (((uint16_t)fd) & 0xFF00) >> 8;
-	dev_index = (((uint16_t)fd) & 0x00FF);
-	
-	while(drv_index > 0){
-		if(drv){
-			drv = drv->next;
-		}else break;
-		drv_index --;
-	}
-	if(drv_index > 0 || !drv) return ret;
-	pdev = drv->driver.devices;
-	while(dev_index){
-		if(pdev){
-			pdev = pdev->next;
-		}else break;
-		dev_index--;
-	}
-	if(dev_index > 0 || !pdev) return ret;
-	if(drv->select){
-		if(readfds) readfd 		= 1;
-		if(writefds) writefd 	= 1;
-		if(exceptfds) errorfd 	= 1;
-		
-		s_timeout = 0;
-		if(timeout){
-			s_timeout = timeout->tv_sec * 1000 / portTICK_PERIOD_MS;
-			s_timeout += timeout->tv_usec /1000 / portTICK_PERIOD_MS;
-		}		
-		ret = drv->select(pdev, &readfd, &writefd, &errorfd, s_timeout);
-		if(ret > 0){
-			if(readfd) 	FD_SET(fd, readfds);
-			if(writefd) FD_SET(fd, writefds);
-			if(errorfd) FD_SET(fd, exceptfds);
-		}
-	}
-	return ret;
-#else
-	int ret = -EPERM;
-	struct platform_driver *drv = 0;
 	struct platform_device **pdev = (struct platform_device **)&___dev_lookup_begin;
-	int readfd = 0, writefd = 0, errorfd = 0;
-	int s_timeout = 0;
+	int s_timeout = 0, i, tmp_fd;
+	uint32_t ulNotificationValue;
+	pthread_t thread;
 
-	fd = fd - 1;
-	if(fd >= 0 && fd <= (&___dev_lookup_end - &___dev_lookup_begin)){
-		drv = (pdev[fd])->driver;
-		if(drv->select){
-			if(readfds) {
-				FD_CLR(fd, readfds);
-				readfd 		= 1;
-			}
-			if(writefds){
-				FD_CLR(fd, writefds);
-				writefd 	= 1;
-			}
-			if(exceptfds){
-				FD_CLR(fd, exceptfds);
-				errorfd 	= 1;
-			}
+	if(timeout){
+		s_timeout = timeout->tv_sec * 1000 * portTICK_PERIOD_MS;
+		s_timeout += timeout->tv_usec / 1000 * portTICK_PERIOD_MS;
+	}
 
-			s_timeout = 0;
-			if(timeout){
-#if 1
-				s_timeout = timeout->tv_sec * 1000 * portTICK_PERIOD_MS;
-				s_timeout += timeout->tv_usec / 1000 * portTICK_PERIOD_MS;
-#else
-				s_timeout = (timeout->tv_sec << 10);
-				s_timeout += ((timeout->tv_usec > 1024) ? (timeout->tv_usec >> 10) : 1);	// 1000us(10^-6) = 1ms(10^-3)
-#endif
-			}
-			ret = drv->select(pdev[fd], &readfd, &writefd, &errorfd, s_timeout);
-			if(ret > 0){
-				if(readfds && readfd) 	FD_SET(fd, readfds);
-				if(writefds && writefd) FD_SET(fd, writefds);
-				if(exceptfds && errorfd) FD_SET(fd, exceptfds);
+	if(readfds){
+		thread.handle = xTaskGetCurrentTaskHandle();
+		readfds->flags = 0;
+		taskENTER_CRITICAL();
+		for(i = 0; i < FD_SET_MAXCNT; i++){
+			tmp_fd = readfds->fd[i];
+			if(tmp_fd != -1){
+				if(pdev[tmp_fd]->i_event){
+					readfds->flags |= (((unsigned int)1) << i);
+					pdev[tmp_fd]->event |= pdev[tmp_fd]->event_mask;
+				}else{
+					pdev[tmp_fd]->event 		= 0x00;
+					pdev[tmp_fd]->event_mask 	= 0x01;
+					pdev[tmp_fd]->current_thread.handle = thread.handle;
+				}
 			}
 		}
+		taskEXIT_CRITICAL();
+		if(readfds->flags){
+			ulNotificationValue = 1;
+		}else{
+			ulNotificationValue = ulTaskNotifyTake( pdTRUE, s_timeout);
+		}
+		if(ulNotificationValue == 1){
+			taskENTER_CRITICAL();
+			for(i = 0; i < FD_SET_MAXCNT; i++){
+				tmp_fd = readfds->fd[i];
+				if(tmp_fd != -1){
+					pdev[tmp_fd]->i_event = 0;
+					if(pdev[tmp_fd]->event & pdev[tmp_fd]->event_mask){
+						readfds->flags |= (((unsigned int)1) << i);
+						ret = 1;
+					}
+					pdev[tmp_fd]->current_thread.handle = 0;
+				}
+			}
+			taskEXIT_CRITICAL();
+		}
+		else ret = 0;
 	}
 	return ret;
-#endif
 }
 
-void 	FD_CLR	(int fd, fd_set *set){
-	*set = FD_INVALID;
-}
-int  	FD_ISSET(int fd, fd_set *set){
-	return (fd == (int)(*set));
-}
-void 	FD_SET	(int fd, fd_set *set){
-	*set = fd;
-}
-void 	FD_ZERO	(fd_set *set){
-	*set = FD_INVALID;
-}
+//void 	FD_CLR	(int fd, fd_set *set){
+//	int i = 0;
+//	for(i = 0; i < FD_SET_MAXCNT; i++)
+//		if(set->fd[i] == fd){
+//			set->flags &= ~(((unsigned int)1) << i);
+//			set->fd[i] = -1;
+//			break;
+//		}
+//}
+//inline int  	FD_ISSET(int fd, fd_set *set){
+//	int i = 0;
+//	int ret = 0;
+//	for(i = 0; i < FD_SET_MAXCNT; i++)
+//		if(set->fd[i] == fd){
+//			if(set->flags & (((unsigned int)1) << i))
+//				ret = 1;
+//			break;
+//		}
+//	return ret;
+//}
+//void 	FD_SET	(int fd, fd_set *set){
+//	int i = 0;
+//	for(i = 0; i < FD_SET_MAXCNT; i++)
+//		if(set->fd[i] == fd){
+//			break;
+//		}
+//	if(i == FD_SET_MAXCNT){
+//		for(i = 0; i < FD_SET_MAXCNT; i++){
+//			if(set->fd[i] == -1){
+//				set->fd[i] = fd;
+//				set->flags |= (((unsigned int)1) << i);
+//				break;
+//			}
+//		}
+//	}
+//}
+//void 	FD_ZERO	(fd_set *set){
+//	int i = 0;
+//	for(i = 0; i < FD_SET_MAXCNT; i++)
+//		set->fd[i] = -1;
+//	set->flags = 0;
+//}
 
 //end of file

@@ -6,6 +6,8 @@ BINDIR=bin
 SRCDIR=.
 EXTRALIB_DIR=../extralib
 ASOURCES=
+CSOURCES=
+CXXSOURCES=
 ifneq (,$(findstring stm32f4,$(TARGET)))
 	TOOLCHAIN_DIR=/home/toolchain/stm32/gcc-arm-none-eabi-4_9-2015q3
 	CROSS_COMPILE=arm-none-eabi-
@@ -23,7 +25,7 @@ ifneq (,$(findstring stm32f4,$(TARGET)))
 	CFLAGS=-nostdlib -Wall -ffunction-sections -fdata-sections -fno-builtin
 	LDFLAGS =-nostdlib -T stm32_flash.ld --specs=nosys.specs $(MCFLAGS) -Wl,-Map=bin/app.map -Wl,-gc-sections --specs=nano.specs
 	DEFS=-DUSE_STDPERIPH_DRIVER -DSTM32F4XX -DUSE_USB_OTG_FS
-	CXXFLAGS+=-fno-exceptions -ffunction-sections -fdata-sections -fno-builtin -fno-rtti
+	CXXFLAGS+=-nostdlib -Wall -fno-exceptions -ffunction-sections -fdata-sections -fno-builtin -fno-rtti
 			
 	BINELF=outp.elf
     BINHEX=outp.hex
@@ -65,6 +67,7 @@ endif
 
 # GNU ARM Embedded Toolchain
 CC=$(TOOLCHAIN_DIR)/bin/$(CROSS_COMPILE)gcc
+CXX=$(TOOLCHAIN_DIR)/bin/$(CROSS_COMPILE)g++
 LD=$(TOOLCHAIN_DIR)/bin/$(CROSS_COMPILE)ld
 AR=$(TOOLCHAIN_DIR)/bin/$(CROSS_COMPILE)ar
 AS=$(TOOLCHAIN_DIR)/bin/$(CROSS_COMPILE)as
@@ -75,6 +78,7 @@ READELF=$(TOOLCHAIN_DIR)/bin/$(CROSS_COMPILE)readelf
 
 CSOURCES+=$(shell find -L $(SRCDIR)/src -name '*.c')
 CSOURCES+=$(shell find -L $(EXTRALIB_DIR)/apps -name '*.c')
+CXXSOURCES+=$(shell find -L $(SRCDIR)/src -name '*.cpp')
 INC+=$(shell find -L $(EXTRALIB_DIR)/apps -name '*.h' -exec dirname {} \; | uniq)
 INC+=$(shell find -L $(SRCDIR)/src -name '*.h' -exec dirname {} \; | uniq)
 #INC+=$(shell find -L $(MESH_DIR) -name '*.h' -exec dirname {} \; | uniq)
@@ -83,6 +87,7 @@ INCLUDES=$(INC:%=-I%)
 OBJECTS+=$(CSRC_LIB:%.c=%.o)
 OBJECTS+=$(ASOURCES:%.s=%.o)
 OBJECTS+=$(CSOURCES:%.c=%.o)
+OBJECTS+=$(CXXSOURCES:%.cpp=%.o)
 # Define output files ELF & IHEX
 
 
@@ -90,6 +95,7 @@ OBJECTS+=$(CSOURCES:%.c=%.o)
 # MCU FLAGS
 # COMPILE FLAGS
 CFLAGS  +=-c $(MCFLAGS) $(DEFS) $(INCLUDES)
+CXXFLAGS  +=-c $(MCFLAGS) $(DEFS) $(INCLUDES)
 ###
 # Optimizations
 
@@ -134,7 +140,9 @@ $(BINDIR)/$(OUTFILE): $(OBJECTS)
 %.o: %.c
 	@$(CC) $(CFLAGS) $< -o $@
 	@echo "CC "$<""
-
+%.o: %.cpp
+	@$(CXX) $(CFLAGS) $< -o $@
+	@echo "CXX "$<""
 %.o: %.s
 	@$(CC) $(CFLAGS) $< -o $@
 	@echo "ASM "$<""

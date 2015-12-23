@@ -9,7 +9,8 @@
 #define SRC_CLI_H_
 
 extern void LREP(char* s, ...);
-int CLI_loop();
+int CLI_start();
+void CLI_process(void* data, int len);
 
 typedef int (*cli_app_callback)(int argc, char** argv, void* user);
 

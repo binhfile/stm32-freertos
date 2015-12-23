@@ -19,10 +19,8 @@ int 	gpio_close		(struct platform_device *dev);
 int		gpio_write		(struct platform_device *dev, const void* buf, int count);
 int		gpio_read		(struct platform_device *dev, void* buf, int count);
 int		gpio_ioctl		(struct platform_device *dev, int request, unsigned int arguments);
-int		gpio_select	(struct platform_device *device, int *readfd, int *writefd, int *exceptfd, int timeout);
 
 struct gpio_driver_arch_data{
-	EventGroupHandle_t	event;
 };
 struct gpio_driver_arch_data g_gpio_driver_arch_data;
 
@@ -43,13 +41,12 @@ static struct platform_driver g_gpio_driver = {
 	.read 		= &gpio_read,
 	.write 		= &gpio_write,
 	.ioctl 		= &gpio_ioctl,
-	.select		= &gpio_select,
+	.select		= 0,
 
 	.next 		= 0,
 };
 
 int gpio_init		(void){
-	g_gpio_driver_arch_data.event = xEventGroupCreate();
 	platform_driver_register(&g_gpio_driver);
 	return 0;
 }
@@ -274,39 +271,27 @@ int		gpio_ioctl	(struct platform_device *dev, int request, unsigned int argument
     
 	return ret;
 }
-int		gpio_select(struct platform_device *dev, int *readfd, int *writefd, int *exceptfd, int timeout){
-	int ret = -EPERM;
-	EventBits_t uxBits;
-	int pin = gpio_get_pin_index(dev->id);
-//	struct gpio_platform_data* data = (struct gpio_platform_data*)dev->dev.platform_data;
-	
-	if(readfd) 		*readfd = 0;
-	if(writefd) 	*writefd = 0;
-	if(exceptfd) 	*exceptfd = 0;
-	if(readfd){
-		uxBits = xEventGroupWaitBits(g_gpio_driver_arch_data.event,
-				((uint32_t)1) << pin,
-				pdTRUE,
-				pdFALSE,
-				timeout);
-		if(uxBits & (((uint32_t)1) << pin)) {
-			*readfd = 1;
-			ret = 1;
-		}
-		else ret = 0;
-	}	
-	return ret;
-}
 void EXTI0_IRQHandler(void) {
 	static BaseType_t xHigherPriorityTaskWoken, xResult;
+	static struct platform_device* dev;
 
 	/* Make sure that interrupt flag is set */
 	if (EXTI_GetITStatus(EXTI_Line0) != RESET) {
 		xHigherPriorityTaskWoken = pdFALSE;
-		xResult = xEventGroupSetBitsFromISR(
-				g_gpio_driver_arch_data.event, 
-				(((uint8_t)1)<< 0),
-				&xHigherPriorityTaskWoken);
+
+		dev = g_gpio_driver.driver.devices;
+		while(dev){
+			if(gpio_get_pin_index(dev->id) == 0){
+				dev->i_event = 1;
+				if(dev->current_thread.handle){
+					dev->event |= dev->event_mask;
+					vTaskNotifyGiveFromISR(dev->current_thread.handle, &xHigherPriorityTaskWoken);
+				}
+				break;
+			}
+			dev = dev->next;
+		}
+
 		/* Clear interrupt flag */
 		EXTI_ClearITPendingBit(EXTI_Line0);
 		/* Was the message posted successfully? */
@@ -322,14 +307,25 @@ void EXTI0_IRQHandler(void) {
 }
 void EXTI1_IRQHandler(void) {
 	static BaseType_t xHigherPriorityTaskWoken, xResult;
+	static struct platform_device* dev;
 
 	/* Make sure that interrupt flag is set */
 	if (EXTI_GetITStatus(EXTI_Line1) != RESET) {
 		xHigherPriorityTaskWoken = pdFALSE;
-		xResult = xEventGroupSetBitsFromISR(
-				g_gpio_driver_arch_data.event, 
-				(((uint8_t)1)<< 1),
-				&xHigherPriorityTaskWoken);
+
+		dev = g_gpio_driver.driver.devices;
+		while(dev){
+			if(gpio_get_pin_index(dev->id) == 1){
+				dev->i_event = 1;
+				if(dev->current_thread.handle){
+					dev->event |= dev->event_mask;
+					vTaskNotifyGiveFromISR(dev->current_thread.handle, &xHigherPriorityTaskWoken);
+				}
+				break;
+			}
+			dev = dev->next;
+		}
+
 		/* Clear interrupt flag */
 		EXTI_ClearITPendingBit(EXTI_Line1);
 		/* Was the message posted successfully? */
@@ -345,14 +341,25 @@ void EXTI1_IRQHandler(void) {
 }
 void EXTI2_IRQHandler(void) {
 	static BaseType_t xHigherPriorityTaskWoken, xResult;
+	static struct platform_device* dev;
 
 	/* Make sure that interrupt flag is set */
 	if (EXTI_GetITStatus(EXTI_Line2) != RESET) {
 		xHigherPriorityTaskWoken = pdFALSE;
-		xResult = xEventGroupSetBitsFromISR(
-				g_gpio_driver_arch_data.event, 
-				(((uint8_t)1)<< 2),
-				&xHigherPriorityTaskWoken);
+
+		dev = g_gpio_driver.driver.devices;
+		while(dev){
+			if(gpio_get_pin_index(dev->id) == 2){
+				dev->i_event = 1;
+				if(dev->current_thread.handle){
+					dev->event |= dev->event_mask;
+					vTaskNotifyGiveFromISR(dev->current_thread.handle, &xHigherPriorityTaskWoken);
+				}
+				break;
+			}
+			dev = dev->next;
+		}
+
 		/* Clear interrupt flag */
 		EXTI_ClearITPendingBit(EXTI_Line2);
 		/* Was the message posted successfully? */
@@ -368,14 +375,24 @@ void EXTI2_IRQHandler(void) {
 }
 void EXTI3_IRQHandler(void) {
 	static BaseType_t xHigherPriorityTaskWoken, xResult;
+	static struct platform_device* dev;
 
 	/* Make sure that interrupt flag is set */
 	if (EXTI_GetITStatus(EXTI_Line3) != RESET) {
 		xHigherPriorityTaskWoken = pdFALSE;
-		xResult = xEventGroupSetBitsFromISR(
-				g_gpio_driver_arch_data.event, 
-				(((uint8_t)1)<< 3),
-				&xHigherPriorityTaskWoken);
+
+		dev = g_gpio_driver.driver.devices;
+		while(dev){
+			if(gpio_get_pin_index(dev->id) == 3){
+				dev->i_event = 1;
+				if(dev->current_thread.handle){
+					dev->event |= dev->event_mask;
+					vTaskNotifyGiveFromISR(dev->current_thread.handle, &xHigherPriorityTaskWoken);
+				}
+				break;
+			}
+			dev = dev->next;
+		}
 		/* Clear interrupt flag */
 		EXTI_ClearITPendingBit(EXTI_Line3);
 		/* Was the message posted successfully? */
@@ -391,14 +408,24 @@ void EXTI3_IRQHandler(void) {
 }
 void EXTI4_IRQHandler(void) {
 	static BaseType_t xHigherPriorityTaskWoken, xResult;
+	static struct platform_device* dev;
 
 	/* Make sure that interrupt flag is set */
 	if (EXTI_GetITStatus(EXTI_Line4) != RESET) {
 		xHigherPriorityTaskWoken = pdFALSE;
-		xResult = xEventGroupSetBitsFromISR(
-				g_gpio_driver_arch_data.event, 
-				(((uint8_t)1)<< 4),
-				&xHigherPriorityTaskWoken);
+
+		dev = g_gpio_driver.driver.devices;
+		while(dev){
+			if(gpio_get_pin_index(dev->id) == 4){
+				dev->i_event = 1;
+				if(dev->current_thread.handle){
+					dev->event |= dev->event_mask;
+					vTaskNotifyGiveFromISR(dev->current_thread.handle, &xHigherPriorityTaskWoken);
+				}
+				break;
+			}
+			dev = dev->next;
+		}
 		/* Clear interrupt flag */
 		EXTI_ClearITPendingBit(EXTI_Line4);
 		/* Was the message posted successfully? */
@@ -415,50 +442,91 @@ void EXTI4_IRQHandler(void) {
 void EXTI9_5_IRQHandler(void) {
 	static BaseType_t xHigherPriorityTaskWoken, xResult;
 	xResult = pdFAIL;
+	static struct platform_device* dev;
 
 	/* Make sure that interrupt flag is set */
 	if (EXTI_GetITStatus(EXTI_Line5) != RESET) {
 		xHigherPriorityTaskWoken = pdFALSE;
-		xResult = xEventGroupSetBitsFromISR(
-				g_gpio_driver_arch_data.event, 
-				(((uint8_t)1)<< 5),
-				&xHigherPriorityTaskWoken);
+		dev = g_gpio_driver.driver.devices;
+		while(dev){
+			if(gpio_get_pin_index(dev->id) == 5){
+				dev->i_event = 1;
+				if(dev->current_thread.handle){
+					dev->event |= dev->event_mask;
+					vTaskNotifyGiveFromISR(dev->current_thread.handle, &xHigherPriorityTaskWoken);
+				}
+				break;
+			}
+			dev = dev->next;
+		}
 		/* Clear interrupt flag */
 		EXTI_ClearITPendingBit(EXTI_Line5);
     }
     if (EXTI_GetITStatus(EXTI_Line6) != RESET) {
 		xHigherPriorityTaskWoken = pdFALSE;
-		xResult = xEventGroupSetBitsFromISR(
-				g_gpio_driver_arch_data.event, 
-				(((uint8_t)1)<< 6),
-				&xHigherPriorityTaskWoken);
+		dev = g_gpio_driver.driver.devices;
+		while(dev){
+			if(gpio_get_pin_index(dev->id) == 6){
+				dev->i_event = 1;
+				if(dev->current_thread.handle){
+					dev->event |= dev->event_mask;
+					vTaskNotifyGiveFromISR(dev->current_thread.handle, &xHigherPriorityTaskWoken);
+				}
+				break;
+			}
+			dev = dev->next;
+		}
 		/* Clear interrupt flag */
 		EXTI_ClearITPendingBit(EXTI_Line6);
     }
     if (EXTI_GetITStatus(EXTI_Line7) != RESET) {
 		xHigherPriorityTaskWoken = pdFALSE;
-		xResult = xEventGroupSetBitsFromISR(
-				g_gpio_driver_arch_data.event, 
-				(((uint8_t)1)<< 7),
-				&xHigherPriorityTaskWoken);
+		dev = g_gpio_driver.driver.devices;
+		while(dev){
+			if(gpio_get_pin_index(dev->id) == 7){
+				dev->i_event = 1;
+				if(dev->current_thread.handle){
+					dev->event |= dev->event_mask;
+					vTaskNotifyGiveFromISR(dev->current_thread.handle, &xHigherPriorityTaskWoken);
+				}
+				break;
+			}
+			dev = dev->next;
+		}
 		/* Clear interrupt flag */
 		EXTI_ClearITPendingBit(EXTI_Line7);
     }
     if (EXTI_GetITStatus(EXTI_Line8) != RESET) {
 		xHigherPriorityTaskWoken = pdFALSE;
-		xResult = xEventGroupSetBitsFromISR(
-				g_gpio_driver_arch_data.event, 
-				(((uint8_t)1)<< 8),
-				&xHigherPriorityTaskWoken);
+		dev = g_gpio_driver.driver.devices;
+		while(dev){
+			if(gpio_get_pin_index(dev->id) == 8){
+				dev->i_event = 1;
+				if(dev->current_thread.handle){
+					dev->event |= dev->event_mask;
+					vTaskNotifyGiveFromISR(dev->current_thread.handle, &xHigherPriorityTaskWoken);
+				}
+				break;
+			}
+			dev = dev->next;
+		}
 		/* Clear interrupt flag */
 		EXTI_ClearITPendingBit(EXTI_Line8);
     }
     if (EXTI_GetITStatus(EXTI_Line9) != RESET) {
 		xHigherPriorityTaskWoken = pdFALSE;
-		xResult = xEventGroupSetBitsFromISR(
-				g_gpio_driver_arch_data.event, 
-				(((uint8_t)1)<< 9),
-				&xHigherPriorityTaskWoken);
+		dev = g_gpio_driver.driver.devices;
+		while(dev){
+			if(gpio_get_pin_index(dev->id) == 9){
+				dev->i_event = 1;
+				if(dev->current_thread.handle){
+					dev->event |= dev->event_mask;
+					vTaskNotifyGiveFromISR(dev->current_thread.handle, &xHigherPriorityTaskWoken);
+				}
+				break;
+			}
+			dev = dev->next;
+		}
 		/* Clear interrupt flag */
 		EXTI_ClearITPendingBit(EXTI_Line9);
     }
@@ -475,58 +543,107 @@ void EXTI9_5_IRQHandler(void) {
 void EXTI15_10_IRQHandler(void) {
 	static BaseType_t xHigherPriorityTaskWoken, xResult;
 	xResult = pdFAIL;
+	static struct platform_device* dev;
 	/* Make sure that interrupt flag is set */
 	if (EXTI_GetITStatus(EXTI_Line10) != RESET) {
 		xHigherPriorityTaskWoken = pdFALSE;
-		xResult = xEventGroupSetBitsFromISR(
-				g_gpio_driver_arch_data.event, 
-				(((uint8_t)1)<< 10),
-				&xHigherPriorityTaskWoken);
+		dev = g_gpio_driver.driver.devices;
+		while(dev){
+			if(gpio_get_pin_index(dev->id) == 10){
+				dev->i_event = 1;
+				if(dev->current_thread.handle){
+					dev->event |= dev->event_mask;
+					vTaskNotifyGiveFromISR(dev->current_thread.handle, &xHigherPriorityTaskWoken);
+				}
+				break;
+			}
+			dev = dev->next;
+		}
 		/* Clear interrupt flag */
 		EXTI_ClearITPendingBit(EXTI_Line10);
     }
     if (EXTI_GetITStatus(EXTI_Line11) != RESET) {
 		xHigherPriorityTaskWoken = pdFALSE;
-		xResult = xEventGroupSetBitsFromISR(
-				g_gpio_driver_arch_data.event, 
-				(((uint8_t)1)<< 11),
-				&xHigherPriorityTaskWoken);
+		dev = g_gpio_driver.driver.devices;
+		while(dev){
+			if(gpio_get_pin_index(dev->id) == 11){
+				dev->i_event = 1;
+				if(dev->current_thread.handle){
+					dev->event |= dev->event_mask;
+					vTaskNotifyGiveFromISR(dev->current_thread.handle, &xHigherPriorityTaskWoken);
+				}
+				break;
+			}
+			dev = dev->next;
+		}
 		/* Clear interrupt flag */
 		EXTI_ClearITPendingBit(EXTI_Line11);
     }
     if (EXTI_GetITStatus(EXTI_Line12) != RESET) {
 		xHigherPriorityTaskWoken = pdFALSE;
-		xResult = xEventGroupSetBitsFromISR(
-				g_gpio_driver_arch_data.event, 
-				(((uint8_t)1)<< 12),
-				&xHigherPriorityTaskWoken);
+		dev = g_gpio_driver.driver.devices;
+		while(dev){
+			if(gpio_get_pin_index(dev->id) == 12){
+				dev->i_event = 1;
+				if(dev->current_thread.handle){
+					dev->event |= dev->event_mask;
+					vTaskNotifyGiveFromISR(dev->current_thread.handle, &xHigherPriorityTaskWoken);
+				}
+				break;
+			}
+			dev = dev->next;
+		}
 		/* Clear interrupt flag */
 		EXTI_ClearITPendingBit(EXTI_Line12);
     }
     if (EXTI_GetITStatus(EXTI_Line13) != RESET) {
 		xHigherPriorityTaskWoken = pdFALSE;
-		xResult = xEventGroupSetBitsFromISR(
-				g_gpio_driver_arch_data.event, 
-				(((uint8_t)1)<< 13),
-				&xHigherPriorityTaskWoken);
+		dev = g_gpio_driver.driver.devices;
+		while(dev){
+			if(gpio_get_pin_index(dev->id) == 13){
+				dev->i_event = 1;
+				if(dev->current_thread.handle){
+					dev->event |= dev->event_mask;
+					vTaskNotifyGiveFromISR(dev->current_thread.handle, &xHigherPriorityTaskWoken);
+				}
+				break;
+			}
+			dev = dev->next;
+		}
 		/* Clear interrupt flag */
 		EXTI_ClearITPendingBit(EXTI_Line13);
     }
     if (EXTI_GetITStatus(EXTI_Line14) != RESET) {
 		xHigherPriorityTaskWoken = pdFALSE;
-		xResult = xEventGroupSetBitsFromISR(
-				g_gpio_driver_arch_data.event, 
-				(((uint8_t)1)<< 14),
-				&xHigherPriorityTaskWoken);
+		dev = g_gpio_driver.driver.devices;
+		while(dev){
+			if(gpio_get_pin_index(dev->id) == 14){
+				dev->i_event = 1;
+				if(dev->current_thread.handle){
+					dev->event |= dev->event_mask;
+					vTaskNotifyGiveFromISR(dev->current_thread.handle, &xHigherPriorityTaskWoken);
+				}
+				break;
+			}
+			dev = dev->next;
+		}
 		/* Clear interrupt flag */
 		EXTI_ClearITPendingBit(EXTI_Line14);
     }
     if (EXTI_GetITStatus(EXTI_Line15) != RESET) {
 		xHigherPriorityTaskWoken = pdFALSE;
-		xResult = xEventGroupSetBitsFromISR(
-				g_gpio_driver_arch_data.event, 
-				(((uint8_t)1)<< 15),
-				&xHigherPriorityTaskWoken);
+		dev = g_gpio_driver.driver.devices;
+		while(dev){
+			if(gpio_get_pin_index(dev->id) == 15){
+				dev->i_event = 1;
+				if(dev->current_thread.handle){
+					dev->event |= dev->event_mask;
+					vTaskNotifyGiveFromISR(dev->current_thread.handle, &xHigherPriorityTaskWoken);
+				}
+				break;
+			}
+			dev = dev->next;
+		}
 		/* Clear interrupt flag */
 		EXTI_ClearITPendingBit(EXTI_Line15);
     }

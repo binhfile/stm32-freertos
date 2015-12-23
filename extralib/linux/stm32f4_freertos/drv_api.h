@@ -14,6 +14,7 @@ extern "C" {
 #include <stdint.h>
 #include "drv_errno.h"
 #include "fcntl.h"
+#include <pthread.h>
 
 typedef int (*init_fxn)(void);
 struct device {
@@ -26,6 +27,12 @@ struct platform_device {
 	struct device   		dev;		// device spec
 	struct platform_device* next;// next device in list of drivers
 	void*					driver;
+
+	unsigned int			event_mask;
+	unsigned int			event;
+	unsigned int			i_event;
+	pthread_t				current_thread;
+
  };
 typedef struct pm_message {
 	int event;
