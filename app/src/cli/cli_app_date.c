@@ -53,6 +53,8 @@ int cli_app_date_callback(int argc, char** argv, void* user){
 					s_tm.tm_hour >= 0 && s_tm.tm_hour < 24 &&
 					s_tm.tm_min >= 0 && s_tm.tm_min < 60 &&
 					s_tm.tm_sec >= 0 && s_tm.tm_sec < 60){
+				s_tm.tm_year-= 1900;
+				s_tm.tm_mon-=1;
 				tm_t = mktime(&s_tm);
 				stime(&tm_t);
 			}else{
@@ -66,8 +68,8 @@ int cli_app_date_callback(int argc, char** argv, void* user){
 		struct tm tm_result;
 		localtime_r(&tm_t, &tm_result);
 		LREP("\r\n%d-%d-%d %d:%d:%d\r\n",
-				tm_result.tm_year,
-				tm_result.tm_mon,
+				tm_result.tm_year+1900,
+				tm_result.tm_mon+1,
 				tm_result.tm_mday,
 				tm_result.tm_hour,
 				tm_result.tm_min,

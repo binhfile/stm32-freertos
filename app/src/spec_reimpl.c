@@ -44,7 +44,8 @@ time_t time(time_t *t){
 	int i;
 
 	if(g_fd_rtc >= 0){
-		if(ioctl(g_fd_rtc, RTC_RD_TIME, (unsigned int)&rtc_tm) == 0){
+		if(ioctl(g_fd_rtc, RTC_RD_TIME, (unsigned int)&rtc_tm) == 0)
+		{
 			rtc_tm.tm_year+=2000;
 			/* Days in back years */
 			for (i = 1970; i < rtc_tm.tm_year; i++) {
@@ -73,8 +74,8 @@ int stime(time_t *t){
 
 	localtime_r(t, &tm_t);
 	if(g_fd_rtc >= 0){
-		rtc_tm.tm_year = tm_t.tm_year - 2000;
-		rtc_tm.tm_mon = tm_t.tm_mon;
+		rtc_tm.tm_year = tm_t.tm_year + 1900 - 2000;
+		rtc_tm.tm_mon = tm_t.tm_mon+1;
 		rtc_tm.tm_mday = tm_t.tm_mday;
 
 		rtc_tm.tm_hour = tm_t.tm_hour;

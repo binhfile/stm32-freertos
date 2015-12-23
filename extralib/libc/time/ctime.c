@@ -64,24 +64,34 @@ struct tm *gmtime_r(const time_t *timep, struct tm *result) {
 	result->tm_sec = 0;
 
 	while (time - year_length(result->tm_year + YEAR_1900) >= 0) {
-		time -= year_length(result->tm_year + YEAR_1900);
+		if(time >= year_length(result->tm_year + YEAR_1900))
+			time -= year_length(result->tm_year + YEAR_1900);
+		else break;
 		result->tm_year++;
 	}
 	while (time - day_of_month >= 0) {
-		time -= day_of_month;
+		if(time >= day_of_month)
+			time -= day_of_month;
+		else break;
 		result->tm_mon++;
 		day_of_month = days_of_month(result->tm_year, result->tm_mon + 1 /*0..11 -> 1..12*/);
 	}
 	while (time - DAY_LENGHT >= 0) {
-		time -= DAY_LENGHT;
+		if(time >= DAY_LENGHT)
+			time -= DAY_LENGHT;
+		else break;
 		result->tm_mday++;
 	}
 	while (time - HOUR_LENGHT >= 0) {
-		time -= HOUR_LENGHT;
+		if(time >= HOUR_LENGHT)
+			time -= HOUR_LENGHT;
+		else break;
 		result->tm_hour++;
 	}
 	while (time - MIN_LENGHT >= 0) {
-		time -= MIN_LENGHT;
+		if(time >= MIN_LENGHT)
+			time -= MIN_LENGHT;
+		else break;
 		result->tm_min++;
 	}
 

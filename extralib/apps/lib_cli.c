@@ -55,7 +55,7 @@ inline uint8_t lib_cli_is_char_valid(uint8_t val){
 	return (val >= '0' && val <= '9') ||
 			(val >= 'A' && val <= 'Z') ||
 			(val >= 'a' && val <= 'z') ||
-			(val == '-' || val == ' ' || val == '?');
+			(val == '-' || val == ' ' || val == '?' ||  val == '/' ||  val == ':');
 }
 inline uint8_t lib_cli_is_space(uint8_t val){
 	return ((val == ' '));
