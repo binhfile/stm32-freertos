@@ -23,7 +23,6 @@
 #define DEV_EEPROM_MISO_NAME	"at93c-miso"
 #elif defined(OS_LINUX)
 #include <poll.h>
-#define configMINIMAL_STACK_SIZE 0
 #define DEV_RF_NAME				"/dev/spidev0.1"
 #endif
 

@@ -251,6 +251,23 @@ int board_register_devices(){
 	platform_device_register(&g_rtc_device);
 	return 0;
 }
+#include <pthread.h>
+#include <misc.h>
+extern int main();
+pthread_t           g_thread_main;
+pthread_attr_t      g_thread_attr_main;
+void os_main(){
+    NVIC_PriorityGroupConfig(NVIC_PriorityGroup_4);
+	  // register drivers & devices
+	driver_probe();
+	board_register_devices();
+
+    pthread_attr_setstacksize(&g_thread_attr_main, 2048);
+    pthread_setschedprio(&g_thread_main, tskIDLE_PRIORITY + 1UL);
+    pthread_create(&g_thread_main, &g_thread_attr_main, main, 0);
+
+	vTaskStartScheduler();
+}
 //end of file
 
 

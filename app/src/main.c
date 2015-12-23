@@ -19,51 +19,45 @@
 #include <cli.h>
 #include <debug.h>
 
-void *Thread_Startup(void*);
 void *Thread_DebugRX(void*);
 void *Thread_RFIntr(void*);
 void *Thread_MiwiTask(void*);
 
 #if defined(OS_FREERTOS)
-#define             APP_THREAD_COUNT    	5
+#define             APP_THREAD_COUNT    	4
 int                 g_fd_led[4]         = {-1};
 int                 g_fd_button         = -1;
 int					g_fd_rtc			= -1;
+mqd_t               g_debug_tx_buffer   = 0;
 void *Thread_DebugTX(void*);
+#define DEFINE_THREAD(fxn, stack_size, priority) \
+	pthread_t thread_##fxn;\
+	pthread_attr_t thread_attr_##fxn;\
+	{\
+    pthread_attr_setstacksize(&thread_attr_##fxn, stack_size);\
+    pthread_setschedprio(&thread_##fxn, priority);\
+    pthread_create(&thread_##fxn, &thread_attr_##fxn, fxn, 0);\
+}
 #elif defined(OS_LINUX)
-#define             APP_THREAD_COUNT    	4
+#define             APP_THREAD_COUNT    	3
+#define DEFINE_THREAD(fxn, stack_size, priority) \
+	pthread_t thread_##fxn;\
+	{\
+    pthread_create(&thread_##fxn, 0, fxn, 0);\
+    g_thread_index++;\
+}
 #endif
 
-pthread_t           g_thread[APP_THREAD_COUNT];
-pthread_attr_t      g_thread_attr[APP_THREAD_COUNT];
-sem_t               g_thread_startup[APP_THREAD_COUNT-1];
 sem_t               g_sem_debug;
 sem_t				g_sem_debug_rx;
+int                 g_fd_debug_tx          	= -1;
+int                 g_fd_debug_rx          	= -1;
 
-mqd_t               g_debug_tx_buffer   = 0;
-int                 g_fd_debug_tx          = -1;
-int                 g_fd_debug_rx          = -1;
-
-
-struct mac_mrf24j40         g_rf_mac;
-struct network				g_nwk;
-struct setting_device       g_setting_dev;
-struct setting_value		g_setting;
-
-int g_thread_index = 1;
-#if defined(OS_FREERTOS)
-#define DEFINE_THREAD(fxn, stack_size, priority) {\
-    pthread_attr_setstacksize(&g_thread_attr[g_thread_index], stack_size);\
-    pthread_setschedprio(&g_thread[g_thread_index], priority);\
-    pthread_create(&g_thread[g_thread_index], &g_thread_attr[g_thread_index], fxn, &g_thread_startup[g_thread_index-1]);\
-    g_thread_index++;\
-}
-#elif defined(OS_LINUX)
-#define DEFINE_THREAD(fxn, stack_size, priority) {\
-    pthread_create(&g_thread[g_thread_index], 0, fxn, &g_thread_startup[g_thread_index-1]);\
-    g_thread_index++;\
-}
-#endif
+struct mac_mrf24j40_open_param  rf_mac_init;
+struct mac_mrf24j40         	g_rf_mac;
+struct network					g_nwk;
+struct setting_device       	g_setting_dev;
+struct setting_value			g_setting;
 
 uint8_t kbhit(int timeout){
     int8_t u8val = 0;
@@ -93,47 +87,19 @@ uint8_t kb_value(){
     if(len <= 0) u8val = 0;
     return u8val;
 }
+
 int main(void)
 {
-    int i;
-#if defined(OS_FREERTOS)
-    g_debug_tx_buffer = mq_open(0, 512);
-#elif defined(OS_LINUX)
-    g_debug_tx_buffer = mq_open("debug-buff", 0);
-#endif
-    for(i = 0; i < APP_THREAD_COUNT-1; i++)
-        sem_init(&g_thread_startup[i], 0, 0);
-    sem_init(&g_sem_debug, 0, 1);
-    sem_init(&g_sem_debug_rx, 0, 0);
-//    sem_init(&g_mimac_access, 0, 1);
-#if defined(OS_FREERTOS)
-    pthread_attr_setstacksize(&g_thread_attr[0], configMINIMAL_STACK_SIZE*64);
-    pthread_setschedprio(&g_thread[0], tskIDLE_PRIORITY + 1UL);
-#endif
-    pthread_create(&g_thread[0], &g_thread_attr[0], Thread_Startup, 0);
-#if defined(OS_FREERTOS)
-    DEFINE_THREAD(Thread_DebugTX, configMINIMAL_STACK_SIZE*8,  tskIDLE_PRIORITY + 1UL);
-#endif
-    DEFINE_THREAD(Thread_RFIntr,  configMINIMAL_STACK_SIZE*16, tskIDLE_PRIORITY + 3UL);
-    DEFINE_THREAD(Thread_MiwiTask,configMINIMAL_STACK_SIZE*32, tskIDLE_PRIORITY + 4UL);
-    DEFINE_THREAD(Thread_DebugRX, configMINIMAL_STACK_SIZE*32,  tskIDLE_PRIORITY + 1UL);
-    
-#if defined(OS_FREERTOS)
-    /* Start the RTOS Scheduler */
-    vTaskStartScheduler();
-    /* HALT */
-    while(1);
-#elif defined(OS_LINUX)
-    while(1){ sleep(1);}
-#endif
-}
-struct mac_mrf24j40_open_param  rf_mac_init;
-void *Thread_Startup(void *pvParameters){
     int i, ival;
     struct termios2 opt;
     unsigned int uival;
     uint8_t u8aVal[32];
+
+    sem_init(&g_sem_debug, 0, 1);
+    sem_init(&g_sem_debug_rx, 0, 0);
+    
 #if defined(OS_FREERTOS)
+    g_debug_tx_buffer = mq_open(0, 128);
     // open gpio
     g_fd_led[0] = open("led-green", 0);
     g_fd_led[1] = open("led-red",   0);
@@ -189,6 +155,12 @@ void *Thread_Startup(void *pvParameters){
                 g_setting_dev.dev.fd_cs, g_setting_dev.dev.fd_sck,
                 g_setting_dev.dev.fd_mosi, g_setting_dev.dev.fd_miso);
     }
+    rf_mac_init.fd_cs = open(DEV_RF_CS_NAME, O_WRONLY);
+    if(rf_mac_init.fd_cs < 0) LREP("open spi cs device failed\r\n");
+    rf_mac_init.fd_reset = open(DEV_RF_RESET_NAME, O_WRONLY);
+    if(rf_mac_init.fd_reset < 0) LREP("open rf-reset device failed\r\n");
+    rf_mac_init.fd_intr = open(DEV_RF_INTR_NAME, O_RDONLY);
+    if(rf_mac_init.fd_intr < 0) LREP("open rf-intr device failed\r\n");
 #elif defined(OS_LINUX)
     g_fd_debug_tx = STDOUT_FILENO;
     g_fd_debug_rx = STDIN_FILENO;
@@ -197,29 +169,7 @@ void *Thread_Startup(void *pvParameters){
 	opt.c_cc[VTIME] = 0;
 	opt.c_lflag &= ~(ICANON | ECHO);
 	ioctl(g_fd_debug_rx, TCSETS2, &opt);
-#endif
-    rf_mac_init.fd_spi = open(DEV_RF_NAME, O_RDWR);
-    if(rf_mac_init.fd_spi < 0){
-        LREP("open spi device '%s' failed %d\r\n", DEV_RF_NAME, rf_mac_init.fd_spi);
-    }
-    else{
-        uival = SPI_MODE_0;
-        if(ioctl(rf_mac_init.fd_spi, SPI_IOC_WR_MODE, (unsigned int)&uival) != 0) LREP("ioctl spi mode failed\r\n");
-        uival = 15000000;
-        if(ioctl(rf_mac_init.fd_spi, SPI_IOC_WR_MAX_SPEED_HZ, (unsigned int)&uival) != 0) LREP("ioctl spi speed failed\r\n");
-        else{
-            //uival = 0;
-            //if(ioctl(rf_mac_init.fd_spi, SPI_IOC_RD_MAX_SPEED_HZ, (unsigned int)&uival) == 0) LREP("ioctl spi speed = %u\r\n", uival);
-        }
-    }
-#if defined(OS_FREERTOS)
-    rf_mac_init.fd_cs = open(DEV_RF_CS_NAME, O_WRONLY);
-    if(rf_mac_init.fd_cs < 0) LREP("open spi cs device failed\r\n");
-    rf_mac_init.fd_reset = open(DEV_RF_RESET_NAME, O_WRONLY);
-    if(rf_mac_init.fd_reset < 0) LREP("open rf-reset device failed\r\n");
-    rf_mac_init.fd_intr = open(DEV_RF_INTR_NAME, O_RDONLY);
-    if(rf_mac_init.fd_intr < 0) LREP("open rf-intr device failed\r\n");
-#else
+
     int _fd = open("/sys/class/gpio/export", O_WRONLY);
     if(_fd >= 0){
     	write(_fd, "17", 2); // intr
@@ -257,6 +207,16 @@ void *Thread_Startup(void *pvParameters){
     rf_mac_init.fd_intr = open("/sys/class/gpio/gpio17/value", O_RDONLY);
     if(rf_mac_init.fd_intr < 0) LREP("open rf-intr device failed\r\n");
 #endif
+    rf_mac_init.fd_spi = open(DEV_RF_NAME, O_RDWR);
+    if(rf_mac_init.fd_spi < 0){
+        LREP("open spi device '%s' failed %d\r\n", DEV_RF_NAME, rf_mac_init.fd_spi);
+    }
+    else{
+        uival = SPI_MODE_0;
+        if(ioctl(rf_mac_init.fd_spi, SPI_IOC_WR_MODE, (unsigned int)&uival) != 0) LREP("ioctl spi mode failed\r\n");
+        uival = 15000000;
+        if(ioctl(rf_mac_init.fd_spi, SPI_IOC_WR_MAX_SPEED_HZ, (unsigned int)&uival) != 0) LREP("ioctl spi speed failed\r\n");
+    }
 
     g_nwk.mac = &g_rf_mac;
     // Miwi network
@@ -264,11 +224,12 @@ void *Thread_Startup(void *pvParameters){
     Network_init(&g_nwk);
     srand(0);
 
-    // signal all other thread startup
-    //LREP("Thread startup is running\r\n");
-    for(i = 0; i < APP_THREAD_COUNT-1; i++){
-        sem_post(&g_thread_startup[i]);
-    }
+#if defined(OS_FREERTOS)
+    DEFINE_THREAD(Thread_DebugTX, 1024, tskIDLE_PRIORITY + 1UL);
+#endif
+    DEFINE_THREAD(Thread_RFIntr,  2048, tskIDLE_PRIORITY + 3UL);
+    DEFINE_THREAD(Thread_MiwiTask,2048, tskIDLE_PRIORITY + 4UL);
+    DEFINE_THREAD(Thread_DebugRX, 2048, tskIDLE_PRIORITY + 1UL);
     usleep(1000* 100);
 
     LREP("\r\nHit any key to break boot sequence");
@@ -383,6 +344,9 @@ void *Thread_Startup(void *pvParameters){
 				}
 			}
     	}
+    }else{
+    	LREP("Type invalid\r\n");
+    	CLI_loop();
     }
 
     sem_post(&g_sem_debug_rx);
@@ -393,7 +357,7 @@ void *Thread_Startup(void *pvParameters){
     return 0;
 }
 #if defined(OS_FREERTOS)
-void *Thread_DebugTX(void* pvParameters){
+void *Thread_DebugTX(void* param){
     uint8_t data;    
     struct timespec abs_timeout;
     abs_timeout.tv_sec = 1;
@@ -404,14 +368,11 @@ void *Thread_DebugTX(void* pvParameters){
     }
 }
 #endif
-void *Thread_RFIntr(void *pvParameters){
+void *Thread_RFIntr(void *param){
     int len;
-    sem_t* sem_startup = (sem_t*)pvParameters;
     fd_set readfs;
     struct timeval timeout;
     
-    sem_wait(sem_startup);
-    //LREP("Thread RFIntr is running\r\n");
 #if defined(OS_FREERTOS)
     FD_CLR(rf_mac_init.fd_intr, &readfs);
     timeout.tv_sec      = 1;
@@ -457,10 +418,7 @@ void *Thread_RFIntr(void *pvParameters){
 	}
 #endif
 }
-void *Thread_MiwiTask(void* pvParameters){
-    sem_t* sem_startup = (sem_t*)pvParameters;
-
-    sem_wait(sem_startup);
+void *Thread_MiwiTask(void*param){
     while(1){
         if(MAC_mrf24j40_select(&g_rf_mac, 100)){
             MAC_mrf24j40_task(&g_rf_mac);
@@ -468,9 +426,7 @@ void *Thread_MiwiTask(void* pvParameters){
     }
     return 0;
 }
-void *Thread_DebugRX(void* pvParameters){
-    sem_t* sem_startup = (sem_t*)pvParameters;
-    sem_wait(sem_startup);
+void *Thread_DebugRX(void*param){
     sem_wait(&g_sem_debug_rx);
     while(1){
     	CLI_loop();

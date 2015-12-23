@@ -22,7 +22,7 @@ ifneq (,$(findstring stm32f4,$(TARGET)))
 	MCFLAGS=-mcpu=cortex-m4 -mthumb -mlittle-endian -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb-interwork
 	CFLAGS=-nostdlib -Wall -ffunction-sections -fdata-sections -fno-builtin
 	LDFLAGS =-nostdlib -T stm32_flash.ld --specs=nosys.specs $(MCFLAGS) -Wl,-Map=bin/app.map -Wl,-gc-sections --specs=nano.specs
-	DEFS=-DUSE_STDPERIPH_DRIVER -DSTM32F4XX	
+	DEFS=-DUSE_STDPERIPH_DRIVER -DSTM32F4XX -DUSE_USB_OTG_FS
 	CXXFLAGS+=-fno-exceptions -ffunction-sections -fdata-sections -fno-builtin -fno-rtti
 			
 	BINELF=outp.elf
