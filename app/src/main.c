@@ -19,11 +19,12 @@
 #include <cli.h>
 #include <debug.h>
 
-void *Thread_ExtInput(void*);
+void *Thread_UserInput(void*);
+void *Thread_PhyIntr(void*);
 void *Thread_MiwiTask(void*);
 
 #if defined(OS_FREERTOS)
-#define             APP_THREAD_COUNT    	3
+#define             APP_THREAD_COUNT    	4
 int                 g_fd_led[4]         = {-1};
 int                 g_fd_button         = -1;
 int					g_fd_rtc			= -1;
@@ -38,7 +39,7 @@ void *Thread_DebugTX(void*);
     pthread_create(&thread_##fxn, &thread_attr_##fxn, fxn, 0);\
 }
 #elif defined(OS_LINUX)
-#define             APP_THREAD_COUNT    	2
+#define             APP_THREAD_COUNT    	3
 #define DEFINE_THREAD(fxn, stack_size, priority) \
 	pthread_t thread_##fxn;\
 	{\
@@ -199,10 +200,11 @@ int main(void)
     srand(0);
 
 #if defined(OS_FREERTOS)
-    DEFINE_THREAD(Thread_DebugTX,  1024, tskIDLE_PRIORITY + 1UL);
+    DEFINE_THREAD(Thread_DebugTX,   1024, tskIDLE_PRIORITY + 1UL);
 #endif
-    DEFINE_THREAD(Thread_ExtInput, 2048, tskIDLE_PRIORITY + 3UL);
-    DEFINE_THREAD(Thread_MiwiTask, 2048, tskIDLE_PRIORITY + 4UL);
+    DEFINE_THREAD(Thread_UserInput, 2048, tskIDLE_PRIORITY + 1UL);
+    DEFINE_THREAD(Thread_PhyIntr,   1024, tskIDLE_PRIORITY + 2UL);
+    DEFINE_THREAD(Thread_MiwiTask,  2048, tskIDLE_PRIORITY + 4UL);
     usleep(1000* 100);
 
     LREP("\r\nHit any key to break boot sequence");
@@ -272,11 +274,11 @@ int main(void)
             u8aVal[1] = ((uival & 0xFF00) >> 8);
             uival = channels[i];
 
-            LREP("Create network channel %d PANId %02X%02X\r\n", uival, u8aVal[1], u8aVal[0]);
             MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_set_channel, (unsigned int)&uival);
             MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_set_pan_id, (unsigned int)&u8aVal[0]);
             u8aVal[0] = 0; u8aVal[1] = 0;
             MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_set_short_address, (unsigned int)&u8aVal[0]);
+            LREP("Create network channel %d PANId %02X%02X\r\n", uival, u8aVal[1], u8aVal[0]);
         }
     }else if(g_setting.network_type == setting_network_type_router){
     	struct network_beacon_info nwk_info[1];
@@ -341,29 +343,24 @@ void *Thread_DebugTX(void* param){
     }
 }
 #endif
-void *Thread_ExtInput(void *param){
+void *Thread_UserInput(void *param){
     int len, fd;
     fd_set readfs;
     struct timeval timeout;
     unsigned char buff[32];
     
     FD_ZERO(&readfs);
-    FD_SET(g_rf_mac_open.fd_intr, &readfs);
     FD_SET(g_fd_debug_rx, &readfs);
     FD_SET(g_fd_button, &readfs);
     timeout.tv_sec      = 1;
     timeout.tv_usec     = 0;
 
-    fd = g_rf_mac_open.fd_intr;
-    if(fd < g_fd_debug_rx) fd = g_fd_debug_rx;
+    fd = g_fd_debug_rx;
     if(fd < g_fd_button) fd = g_fd_button;
     CLI_start();
     while (1) {
         len = select(fd+1, &readfs, 0, 0, &timeout);
         if(len > 0){
-            if(FD_ISSET(g_rf_mac_open.fd_intr, &readfs)){
-                MAC_mrf24j40_ioctl(&g_rf_mac, mac_mrf24j40_ioc_trigger_interrupt, 0);
-            }
             if(FD_ISSET(g_fd_debug_rx, &readfs)){
 				len = read(g_fd_debug_rx, buff, 32);
 				if(len > 0){
@@ -382,6 +379,26 @@ void *Thread_ExtInput(void *param){
         }
     }
     while(1){sleep(1);}
+}
+void* Thread_PhyIntr(void* param){
+	int len, fd;
+	fd_set readfs;
+	struct timeval timeout;
+
+	FD_ZERO(&readfs);
+	FD_SET(g_rf_mac_open.fd_intr, &readfs);
+    fd = g_rf_mac_open.fd_intr;
+    timeout.tv_sec      = 1;
+    timeout.tv_usec     = 0;
+    while(1){
+        len = select(fd+1, &readfs, 0, 0, &timeout);
+        if(len > 0){
+            if(FD_ISSET(g_rf_mac_open.fd_intr, &readfs)){
+                MAC_mrf24j40_ioctl(&g_rf_mac, mac_mrf24j40_ioc_trigger_interrupt, 0);
+            }
+        }
+    }
+    return 0;
 }
 void *Thread_MiwiTask(void*param){
     while(1){

@@ -262,7 +262,7 @@ void os_main(){
 	driver_probe();
 	board_register_devices();
 
-    pthread_attr_setstacksize(&g_thread_attr_main, 2048);
+    pthread_attr_setstacksize(&g_thread_attr_main, 1024*3);
     pthread_setschedprio(&g_thread_main, tskIDLE_PRIORITY + 1UL);
     pthread_create(&g_thread_main, &g_thread_attr_main, main, 0);
 

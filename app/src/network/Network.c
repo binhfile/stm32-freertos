@@ -394,6 +394,7 @@ int Network_echo_request(struct network *nwk, uint16_t address, int count, int d
 					info->passed ++;
 					failed_cnt = 0;
 				}else{
+					LREP("false @ %d\r\n", i);
 					info->failed++;
 				}
 			}else{
