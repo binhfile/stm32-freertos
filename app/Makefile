@@ -78,8 +78,10 @@ READELF=$(TOOLCHAIN_DIR)/bin/$(CROSS_COMPILE)readelf
 
 CSOURCES+=$(shell find -L $(SRCDIR)/src -name '*.c')
 CSOURCES+=$(shell find -L $(EXTRALIB_DIR)/apps -name '*.c')
+CSOURCES+=$(shell find -L $(EXTRALIB_DIR)/lib -name '*.c')
 CXXSOURCES+=$(shell find -L $(SRCDIR)/src -name '*.cpp')
 INC+=$(shell find -L $(EXTRALIB_DIR)/apps -name '*.h' -exec dirname {} \; | uniq)
+INC+=$(shell find -L $(EXTRALIB_DIR)/lib -name '*.h' -exec dirname {} \; | uniq)
 INC+=$(shell find -L $(SRCDIR)/src -name '*.h' -exec dirname {} \; | uniq)
 #INC+=$(shell find -L $(MESH_DIR) -name '*.h' -exec dirname {} \; | uniq)
 INCLUDES=$(INC:%=-I%)
