@@ -283,13 +283,12 @@ int Network_process_packet(struct network *nwk, struct network_packet* pkt, int 
 				break;
 			}
 			case network_packet_type_echo_req:{
-				uint16_t address = ((uint16_t)(read_param->srcAddr & 0x00FFFF));
-				NWK_LREP("recv[rssi:%02X, lqi:%02X] ping request from %04X\r\n",
-						read_param->rssi, read_param->lqi, address);
-                DUMP(pkt, len, "recv echo");
-                usleep(1000*1);
+				//uint16_t address = ((uint16_t)(read_param->srcAddr & 0x00FFFF));
+				//NWK_LREP("recv[rssi:%02X, lqi:%02X] ping request from %04X\r\n",
+				//		read_param->rssi, read_param->lqi, address);
+                //DUMP(pkt, len, "recv echo");
 				Network_echo_respond(nwk, pkt, len, read_param);
-				LED_TOGGLE(BLUE);
+				LED_TOGGLE(ORANGE);
 				processed = 1;
 				break;
 			}
