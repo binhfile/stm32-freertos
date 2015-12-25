@@ -315,7 +315,7 @@ int 	MAC_mrf24j40_open(struct mac_mrf24j40* mac, struct mac_mrf24j40_open_param 
 	mac->phy.s_address[1] = 0xff;
 	mac->phy.pan_id[0] 	  = 0xff;
 	mac->phy.pan_id[1] 	  = 0xff;
-	mac->phy.channel	  = 25;
+	mac->phy.channel	  = 16;
 	mac->phy.turboEn 	  = 0;
 
 	mac->txSeq = 0;
@@ -353,6 +353,7 @@ int 	MAC_mrf24j40_read(struct mac_mrf24j40* mac, struct mac_mrf24j40_read_param 
 		}
 	}
 	if(item){
+        //LREP("has one rx frm in queue\r\n");
 		frmCtrl = (struct mac_ieee802154_frm_ctrl *)&item->payload[1];	// offset hdr_len
 		hdr_len = 1+2+1+2; // frame_len(1)+frameCtrl(2)+seq(1)+PANId(2)
 		if(frmCtrl->bits.destAddrMode == mac_iee802154_addrmode_16bit){
@@ -409,7 +410,8 @@ int 	MAC_mrf24j40_read(struct mac_mrf24j40* mac, struct mac_mrf24j40_read_param 
 		abs_timeout.tv_sec = timeout / 1000;
 		abs_timeout.tv_nsec= (timeout % 1000) * 1000000;
 
-		flag_event_timedwait(&mac->rx_event, &abs_timeout);
+		i = flag_event_timedwait(&mac->rx_event, &abs_timeout);
+        //if(i > 0) LREP("recv post rx\r\n");
 
 		__mac_mrf24j40_lock(mac);
 		for(i = 0; i < MAC_MRF24J40_READ_MAX_ITEMS; i++){
@@ -707,6 +709,7 @@ int 	MAC_mrf24j40_task(struct mac_mrf24j40* mac){
 			read_item->payload_len = u8len;
 			read_item->flags |= 0x01;	// set flags
 			mac->flags |= ((uint8_t)1 << MAC_MRF24J40_FLAG_RX_DONE);
+            //LREP("post rx\r\n");
 			flag_event_post(&mac->rx_event);
 		}else{
 			LREP_WARN("no more rx space\r\n");

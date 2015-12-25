@@ -22,7 +22,7 @@ extern int g_fd_led[];
 
 void LREP(char* s, ...);
 #define LREP_WARN(s, args...) LREP("%d@%s " s, __LINE__, __FILE__, ##args)
-
+void DUMP(const void* data, int len, const char* string, ...);
 
 
 extern uint8_t kbhit(int timeout);

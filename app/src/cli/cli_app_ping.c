@@ -81,8 +81,8 @@ int cli_app_ping_callback(int argc, char** argv, void* user){
 					LREP("Successed: %u (%d%%)\r\n", info.passed, (info.total > 0) ? info.passed*100/info.total : 0);
 					LREP("Timeout:   %u\r\n", info.timeout);
 					LREP("Error:     %u\r\n", info.failed);
-					LREP("Arg speed: %u.%u KiB/s\r\n", info.passed*leng / info.time_diff * 1000 / 1024,
-							(info.passed*leng / info.time_diff * 1000 - (info.passed*leng / info.time_diff * 1000 / 1024)*1024)*10/1024);
+					LREP("Arg speed: %u.%u KiB/s\r\n", info.passed*leng*1000 / info.time_diff / 1024,
+							(info.passed*leng*1000 / info.time_diff - (info.passed*leng * 1000 / info.time_diff / 1024)*1024)*10/1024);
 				}
 			}
 	   }

@@ -3,13 +3,8 @@
 #include <stddef.h>
 #include <stdint.h>
 #undef fd_set
-
-#define FD_SET_MAXCNT	8
-typedef struct{
-	int fd[FD_SET_MAXCNT];
-	unsigned int flags;
-}fd_set;
-
+#define fd_set unsigned int
+#define FD_INVALID	((fd_set)-1)
 struct timeval {
 	long	tv_sec;		/* seconds */
 	long	tv_usec;	/* and microseconds */
@@ -34,51 +29,8 @@ int 	ioctl	(int d, int request, unsigned int arguments);
 int 	select(int nfds, fd_set *readfds, fd_set *writefds,
 		  fd_set *exceptfds, struct timeval *timeout);
 
-//void 	FD_CLR	(int fd, fd_set *set);
-//int  	FD_ISSET(int fd, fd_set *set);
-//void 	FD_SET	(int fd, fd_set *set);
-//void 	FD_ZERO	(fd_set *set);
-
-static __inline__ int  	FD_ISSET(int fd, fd_set *set){
-	int i = 0;
-	int ret = 0;
-	for(i = 0; i < FD_SET_MAXCNT; i++)
-		if(set->fd[i] == fd){
-			if(set->flags & (((unsigned int)1) << i))
-				ret = 1;
-			break;
-		}
-	return ret;
-}
-static __inline__ void 	FD_SET	(int fd, fd_set *set){
-	int i = 0;
-	for(i = 0; i < FD_SET_MAXCNT; i++)
-		if(set->fd[i] == fd){
-			break;
-		}
-	if(i == FD_SET_MAXCNT){
-		for(i = 0; i < FD_SET_MAXCNT; i++){
-			if(set->fd[i] == -1){
-				set->fd[i] = fd;
-				set->flags |= (((unsigned int)1) << i);
-				break;
-			}
-		}
-	}
-}
-static __inline__ void 	FD_ZERO	(fd_set *set){
-	int i = 0;
-	for(i = 0; i < FD_SET_MAXCNT; i++)
-		set->fd[i] = -1;
-	set->flags = 0;
-}
-static __inline__ void 	FD_CLR	(int fd, fd_set *set){
-	int i = 0;
-	for(i = 0; i < FD_SET_MAXCNT; i++)
-		if(set->fd[i] == fd){
-			set->flags &= ~(((unsigned int)1) << i);
-			set->fd[i] = -1;
-			break;
-		}
-}
+void 	FD_CLR	(int fd, fd_set *set);
+int  	FD_ISSET(int fd, fd_set *set);
+void 	FD_SET	(int fd, fd_set *set);
+void 	FD_ZERO	(fd_set *set);
 #endif

@@ -202,9 +202,9 @@ int main(void)
 #if defined(OS_FREERTOS)
     DEFINE_THREAD(Thread_DebugTX,   1024, tskIDLE_PRIORITY + 1UL);
 #endif
-    DEFINE_THREAD(Thread_UserInput, 2048, tskIDLE_PRIORITY + 1UL);
-    DEFINE_THREAD(Thread_PhyIntr,   1024, tskIDLE_PRIORITY + 2UL);
+    DEFINE_THREAD(Thread_UserInput, 2048, tskIDLE_PRIORITY + 3UL);
     DEFINE_THREAD(Thread_MiwiTask,  2048, tskIDLE_PRIORITY + 4UL);
+    DEFINE_THREAD(Thread_PhyIntr,   2048, tskIDLE_PRIORITY + 1UL);
     usleep(1000* 100);
 
     LREP("\r\nHit any key to break boot sequence");
@@ -225,7 +225,7 @@ int main(void)
     setting_read(&g_setting_dev, &g_setting);
     LREP("Setting:\r\n");
     setting_dump_to_stdio(&g_setting);
-    uival = 25;
+    uival = 16;
     MAC_mrf24j40_ioctl(&g_rf_mac, mac_mrf24j40_ioc_set_channel, (unsigned int)&uival);
     for(i = 0; i < 8 ; i++)
         u8aVal[i] = g_setting.mac_long_address[i];
@@ -257,7 +257,7 @@ int main(void)
 //        }
         //for(i =0 ;i < 15; i++) channels[14-i] = i + 11;
         i = 0;
-        channels[i] = 25;
+        channels[i] = 11;
         //for(i = 0; i < 15; i++){
             LREP("Detect network on channel %d ...", channels[i]);
             ival = Network_detect_current_network(&g_nwk, channels[i], nwk_info, 1);
@@ -286,7 +286,7 @@ int main(void)
     	LREP("Join to new network\r\n");
     	while(1){
 			// Request a network
-    		i = 25;
+    		i = 11;
 			//for(i = 25; i >= 11; i--){
 				LREP("Detect network on channel %d ...", i);
 				MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_reset, 0);
@@ -351,12 +351,10 @@ void *Thread_UserInput(void *param){
     
     FD_ZERO(&readfs);
     FD_SET(g_fd_debug_rx, &readfs);
-    FD_SET(g_fd_button, &readfs);
     timeout.tv_sec      = 1;
     timeout.tv_usec     = 0;
 
     fd = g_fd_debug_rx;
-    if(fd < g_fd_button) fd = g_fd_button;
     CLI_start();
     while (1) {
         len = select(fd+1, &readfs, 0, 0, &timeout);
@@ -367,9 +365,6 @@ void *Thread_UserInput(void *param){
 					g_kb_value = buff[0];
 					CLI_process(buff, len);
 				}
-			}
-			if(FD_ISSET(g_fd_button, &readfs)){
-				LREP("\r\nbutton pressed\r\n");
 			}
         }else if(len == 0){
         	LED_TOGGLE(GREEN);

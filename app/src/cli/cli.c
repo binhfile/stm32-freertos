@@ -35,12 +35,54 @@ void LREP(char* s, ...){
     len = strlen(szBuffer);
     sem_wait(&g_sem_debug);
 #if defined(OS_FREERTOS)
-    mq_send(g_debug_tx_buffer, szBuffer, len, 0);
+    //mq_send(g_debug_tx_buffer, szBuffer, len, 0);
+    write(g_fd_debug_tx, szBuffer, len);
 #elif defined(OS_LINUX)
     printf("%s", szBuffer);fflush(stdout);
 
 #endif
     sem_post(&g_sem_debug);
+}
+int isprint(unsigned char ch){
+    return ((ch >= 32) && (ch <= 126));
+}
+void DUMP(const void* data, int len, const char* string, ...)
+{
+    uint8_t* p = (uint8_t*)data;
+    uint8_t  buffer[16];
+    int iLen, i;
+
+    LREP("%s %u bytes\r\n", string, len);
+    while (len > 0)
+    {
+        iLen = (len > 16) ? 16 : len;
+        memset(buffer, 0, 16);
+        memcpy(buffer, p, iLen);/* iLen <= 16 = sizeof(buffer)*/
+        for (i = 0; i < 16; i++)
+        {
+            if (i < iLen)
+                LREP("%02X ", buffer[i]);
+            else
+                LREP("   ");
+        }
+        LREP("\t");
+        for (i = 0; i < 16; i++)
+        {
+            if (i < iLen)
+            {
+                if (isprint(buffer[i]))
+                    LREP("%c", (char)buffer[i]);
+                else
+                    LREP(".");
+            }
+            else
+                LREP(" ");
+        }
+        LREP("\r\n");
+        len -= iLen;
+        p += iLen;
+    }
+    //_PRINT("\n");
 }
 void CLI_display_help(){
 	struct cli_app_info **app;

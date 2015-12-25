@@ -283,9 +283,11 @@ int Network_process_packet(struct network *nwk, struct network_packet* pkt, int 
 				break;
 			}
 			case network_packet_type_echo_req:{
-//				uint16_t address = ((uint16_t)(read_param->srcAddr & 0x00FFFF));
-//				NWK_LREP("recv[rssi:%02X, lqi:%02X] ping request from %04X\r\n",
-//						read_param->rssi, read_param->lqi, address);
+				uint16_t address = ((uint16_t)(read_param->srcAddr & 0x00FFFF));
+				NWK_LREP("recv[rssi:%02X, lqi:%02X] ping request from %04X\r\n",
+						read_param->rssi, read_param->lqi, address);
+                DUMP(pkt, len, "recv echo");
+                usleep(1000*1);
 				Network_echo_respond(nwk, pkt, len, read_param);
 				LED_TOGGLE(BLUE);
 				processed = 1;
@@ -340,10 +342,10 @@ int Network_echo_request(struct network *nwk, uint16_t address, int count, int d
 	struct mac_mrf24j40_read_param read_param;
 	struct network_packet* nwk_packet;
 	uint8_t tx[144], rx[144];
-	uint8_t cnt = 0;
 	int timeout = 200;
 	struct timespec t_now, t_ref;
 	int failed_cnt = 0;
+    int timeout_cnt;
 
 	write_param.flags.bits.packetType 	= MAC_MRF24J40_PACKET_TYPE_DATA;
 	write_param.flags.bits.broadcast	= 0;
@@ -377,11 +379,15 @@ int Network_echo_request(struct network *nwk, uint16_t address, int count, int d
 	while(count -- && kb_value() != 0x03){
 		failed_cnt++;
 		for(i = 0; i < datalen; i++)
-			req->data[i] = cnt++;
+			req->data[i] = rand();
 		len = sizeof(struct network_packet) - 1 + sizeof(struct network_args_echo_req);
 
 		MAC_mrf24j40_write(nwk->mac, &write_param, pkt, len);
-		len = MAC_mrf24j40_read(nwk->mac, &read_param, rx, 144, timeout);
+        len = 0;
+        timeout_cnt = 2;
+        do{
+            len = MAC_mrf24j40_read(nwk->mac, &read_param, rx, 144, timeout);
+        }while(len == 0 && timeout_cnt --);
 		if(len >= sizeof(struct network_packet)-1){
 			if(nwk_packet->type == network_packet_type_echo_res){
 				i = 0;
@@ -393,20 +399,22 @@ int Network_echo_request(struct network *nwk, uint16_t address, int count, int d
 				if(i == datalen) {
 					info->passed ++;
 					failed_cnt = 0;
+                    //LREP("[%d]rx done\r\n", count);
 				}else{
 					LREP("false @ %d\r\n", i);
 					info->failed++;
+                    NWK_LREP_WARN("[%d]rx test failed @%d len %d\r\n", count, i, datalen);
+                    DUMP(req->data, datalen, "tx");
+                    DUMP(res->data, datalen, "rx");
 				}
 			}else{
-//				NWK_LREP_WARN("packet type %02X not echo-res\r\n", nwk_packet->type);
+				NWK_LREP_WARN("[%d]packet type %02X not echo-res\r\n", count, nwk_packet->type);
 				info->timeout++;
 				Network_process_packet(nwk, nwk_packet, len, &read_param);
 			}
 		}else{
-			if(len > 0)
-				NWK_LREP_WARN("packet invalid length %u\r\n", len);
-			info->timeout++;
-
+            NWK_LREP_WARN("[%d]packet invalid length %u\r\n", count, len);
+            info->timeout++;
 		}
 		if(failed_cnt > 10) break;
 	}

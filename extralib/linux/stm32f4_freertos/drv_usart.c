@@ -12,8 +12,6 @@
 
 #include <termios.h>
 #include <string.h>
-#include <ringbuffer.h>
-#include <portable.h>
 
 int 	usart_init		(void);
 int 	usart_open		(struct platform_device *dev, int flags);
@@ -21,10 +19,10 @@ int 	usart_close		(struct platform_device *dev);
 int		usart_write		(struct platform_device *dev, const void* buf, int count);
 int		usart_read		(struct platform_device *dev, void* buf, int count);
 int		usart_ioctl		(struct platform_device *dev, int request, unsigned int arguments);
+int		usart_select	(struct platform_device *device, int *readfd, int *writefd, int *exceptfd, int timeout);
 
 struct usart_driver_arch_data{
-	ringbuffer rx_ring[USART_MODULE_COUNT];
-	void*	   rx_buff[USART_MODULE_COUNT];
+	void* rx_event[USART_MODULE_COUNT];
 };
 struct usart_driver_arch_data g_usart_driver_arch_data;
 
@@ -45,7 +43,7 @@ static struct platform_driver g_usart_driver = {
 	.read 		= &usart_read,
 	.write 		= &usart_write,
 	.ioctl 		= &usart_ioctl,
-	.select		= 0,
+	.select		= &usart_select,
 
 	.next 		= 0,
 };
@@ -155,10 +153,8 @@ int 	usart_open		(struct platform_device *dev, int flags){
 	
 	USART_Cmd(USARTx, ENABLE);
 	data->__drv_usart_base = (void*)USARTx;
-	if(!g_usart_driver_arch_data.rx_buff[dev->id]){
-		g_usart_driver_arch_data.rx_buff[dev->id] = pvPortMalloc(32);
-		ringbuffer_init(&g_usart_driver_arch_data.rx_ring[dev->id], g_usart_driver_arch_data.rx_buff[dev->id], 32);
-	}
+	if(!g_usart_driver_arch_data.rx_event[dev->id])
+		g_usart_driver_arch_data.rx_event[dev->id] = xQueueCreate(32, 1);
 	ret = 0;
 	return ret;
 }
@@ -173,12 +169,17 @@ int 	usart_close		(struct platform_device *dev){
 }
 int		usart_read		(struct platform_device *dev, void* buf, int count){
 	int ret = -EPERM;
+	unsigned char* p = (unsigned char*)buf;
 
 	if(!dev || dev->id < 0 || dev->id >= USART_MODULE_COUNT) return ret;
 	ret = 0;
-	taskENTER_CRITICAL();
-	ret = ringbuffer_read(&g_usart_driver_arch_data.rx_ring[dev->id], buf, count);
-	taskEXIT_CRITICAL();
+	while(count > 0){
+		if(xQueueReceive(g_usart_driver_arch_data.rx_event[dev->id], p, 0) != pdTRUE)
+			break;
+		count --;
+		p++;
+		ret++;
+	}
 	return ret;
 }
 int		usart_write	(struct platform_device *dev, const void* buf, int count){
@@ -222,160 +223,92 @@ int		usart_ioctl	(struct platform_device *dev, int request, unsigned int argumen
 	
 	return ret;
 }
+int		usart_select(struct platform_device *dev, int *readfd, int *writefd, int *exceptfd, int timeout){
+	int ret = -EPERM;
+	uint8_t u8data;
+	if(readfd) 		*readfd = 0;
+	if(writefd) 	*writefd = 0;
+	if(exceptfd) 	*exceptfd = 0;
+	if(readfd){
+		ret = xQueuePeek(g_usart_driver_arch_data.rx_event[dev->id], &u8data, timeout);
+		if(ret == pdTRUE) {
+			*readfd = 1;
+			ret = 1;
+		}
+		else ret = 0;
+	}	
+	return ret;
+}
 // this is the interrupt request handler (IRQ) for ALL USART1 interrupts
 void USART1_IRQHandler(void){
 	static uint8_t data;
 	static BaseType_t xHigherPriorityTaskWoken;
 	static USART_TypeDef* USARTx = USART1;
-	static struct platform_device* dev;
 	
 	if( USART_GetITStatus(USARTx, USART_IT_RXNE) ){
 		USART_ClearITPendingBit(USARTx, USART_IT_RXNE);
 		data = USART_ReceiveData(USARTx);
 		xHigherPriorityTaskWoken = pdTRUE;
-
-		ringbuffer_write(&g_usart_driver_arch_data.rx_ring[0], &data, 1);
-		dev = g_usart_driver.driver.devices;
-		while(dev){
-			if(dev->id == 0){
-				dev->i_event = 0x01;
-				if(dev->current_thread.handle){
-					dev->event |= dev->event_mask;
-					vTaskNotifyGiveFromISR(dev->current_thread.handle, &xHigherPriorityTaskWoken);
-				}
-				break;
-			}
-			dev = dev->next;
-		}
+		xQueueSendFromISR(g_usart_driver_arch_data.rx_event[0], &data, &xHigherPriorityTaskWoken);
 	}
 }
 void USART2_IRQHandler(void){
 	static uint8_t data;
 	static BaseType_t xHigherPriorityTaskWoken;
 	static USART_TypeDef* USARTx = USART2;
-	static struct platform_device* dev;
 	
 	if( USART_GetITStatus(USARTx, USART_IT_RXNE) ){
 		USART_ClearITPendingBit(USARTx, USART_IT_RXNE);
 		data = USART_ReceiveData(USARTx);
 		xHigherPriorityTaskWoken = pdTRUE;
-		ringbuffer_write(&g_usart_driver_arch_data.rx_ring[1], &data, 1);
-
-		dev = g_usart_driver.driver.devices;
-		while(dev){
-			if(dev->id == 1){
-				dev->i_event = 0x01;
-				if(dev->current_thread.handle){
-					dev->event |= dev->event_mask;
-					vTaskNotifyGiveFromISR(dev->current_thread.handle, &xHigherPriorityTaskWoken);
-				}
-				break;
-			}
-			dev = dev->next;
-		}
+		xQueueSendFromISR(g_usart_driver_arch_data.rx_event[1], &data, &xHigherPriorityTaskWoken);
 	}
 }
 void USART3_IRQHandler(void){
 	static uint8_t data;
 	static BaseType_t xHigherPriorityTaskWoken;
 	static USART_TypeDef* USARTx = USART3;
-	static struct platform_device* dev;
 	
 	if( USART_GetITStatus(USARTx, USART_IT_RXNE) ){
 		USART_ClearITPendingBit(USARTx, USART_IT_RXNE);
 		data = USART_ReceiveData(USARTx);
 		xHigherPriorityTaskWoken = pdTRUE;
-		ringbuffer_write(&g_usart_driver_arch_data.rx_ring[2], &data, 1);
-
-		dev = g_usart_driver.driver.devices;
-		while(dev){
-			if(dev->id == 2){
-				dev->i_event = 0x01;
-				if(dev->current_thread.handle){
-					dev->event |= dev->event_mask;
-					vTaskNotifyGiveFromISR(dev->current_thread.handle, &xHigherPriorityTaskWoken);
-				}
-				break;
-			}
-			dev = dev->next;
-		}
+		xQueueSendFromISR(g_usart_driver_arch_data.rx_event[2], &data, &xHigherPriorityTaskWoken);
 	}
 }
 void UART4_IRQHandler(void){
 	static uint8_t data;
 	static BaseType_t xHigherPriorityTaskWoken;
 	static USART_TypeDef* USARTx = UART4;
-	static struct platform_device* dev;
 	
 	if( USART_GetITStatus(USARTx, USART_IT_RXNE) ){
 		USART_ClearITPendingBit(USARTx, USART_IT_RXNE);
 		data = USART_ReceiveData(USARTx);
 		xHigherPriorityTaskWoken = pdTRUE;
-		ringbuffer_write(&g_usart_driver_arch_data.rx_ring[3], &data, 1);
-
-		dev = g_usart_driver.driver.devices;
-		while(dev){
-			if(dev->id == 3){
-				dev->i_event = 0x01;
-				if(dev->current_thread.handle){
-					dev->event |= dev->event_mask;
-					vTaskNotifyGiveFromISR(dev->current_thread.handle, &xHigherPriorityTaskWoken);
-				}
-				break;
-			}
-			dev = dev->next;
-		}
+		xQueueSendFromISR(g_usart_driver_arch_data.rx_event[3], &data, &xHigherPriorityTaskWoken);
 	}
 }
 void UART5_IRQHandler(void){
 	static uint8_t data;
 	static BaseType_t xHigherPriorityTaskWoken;
 	static USART_TypeDef* USARTx = UART5;
-	static struct platform_device* dev;
 	
 	if( USART_GetITStatus(USARTx, USART_IT_RXNE) ){
 		USART_ClearITPendingBit(USARTx, USART_IT_RXNE);
 		data = USART_ReceiveData(USARTx);
 		xHigherPriorityTaskWoken = pdTRUE;
-		ringbuffer_write(&g_usart_driver_arch_data.rx_ring[4], &data, 1);
-
-		dev = g_usart_driver.driver.devices;
-		while(dev){
-			if(dev->id == 4){
-				dev->i_event = 0x01;
-				if(dev->current_thread.handle){
-					dev->event |= dev->event_mask;
-					vTaskNotifyGiveFromISR(dev->current_thread.handle, &xHigherPriorityTaskWoken);
-				}
-				break;
-			}
-			dev = dev->next;
-		}
+		xQueueSendFromISR(g_usart_driver_arch_data.rx_event[4], &data, &xHigherPriorityTaskWoken);
 	}
 }
 void USART6_IRQHandler(void){
 	static uint8_t data;
 	static BaseType_t xHigherPriorityTaskWoken;
 	static USART_TypeDef* USARTx = USART6;
-	static struct platform_device* dev;
 	
 	if( USART_GetITStatus(USARTx, USART_IT_RXNE) ){
 		USART_ClearITPendingBit(USARTx, USART_IT_RXNE);
 		data = USART_ReceiveData(USARTx);
 		xHigherPriorityTaskWoken = pdTRUE;
-		ringbuffer_write(&g_usart_driver_arch_data.rx_ring[5], &data, 1);
-
-		dev = g_usart_driver.driver.devices;
-		while(dev){
-			if(dev->id == 5){
-				dev->i_event = 0x01;
-				if(dev->current_thread.handle){
-					dev->event |= dev->event_mask;
-					vTaskNotifyGiveFromISR(dev->current_thread.handle, &xHigherPriorityTaskWoken);
-				}
-				break;
-			}
-			dev = dev->next;
-		}
+		xQueueSendFromISR(g_usart_driver_arch_data.rx_event[5], &data, &xHigherPriorityTaskWoken);
 	}
 }
