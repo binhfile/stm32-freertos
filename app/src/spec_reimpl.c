@@ -12,6 +12,9 @@
 #include <rtc.h>
 #include <debug.h>
 
+#include <FreeRTOS.h>
+volatile TickType_t t_profile_ref, t_profile_now;
+
 int g_fd_random = 0;
 extern int g_fd_rtc;
 

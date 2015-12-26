@@ -16,10 +16,14 @@
 
 #if defined(OS_FREERTOS)
 #define PHY_SPEED	15000000
+#if 0
 #define PHY_SET_CS(phy, val) { \
 		uint8_t __u8val = val;\
 		if(phy->fd_cs >= 0) write(phy->fd_cs, &__u8val, 1);\
 }
+#else
+#define PHY_SET_CS(phy, val)
+#endif
 #elif defined(OS_LINUX)
 #define PHY_SPEED   1000000
 #define PHY_SET_CS(phy, val) { \
@@ -331,6 +335,7 @@ int 	MAC_mrf24j40_open(struct mac_mrf24j40* mac, struct mac_mrf24j40_open_param 
 
 	flag_event_init(&mac->event);
 	flag_event_init(&mac->rx_event);
+	flag_event_init(&mac->tx_event);
 	sem_init(&mac->sem_access, 0, 1);
 	sem_wait(&mac->sem_access);
 	sem_post(&mac->sem_access);
@@ -338,6 +343,33 @@ int 	MAC_mrf24j40_open(struct mac_mrf24j40* mac, struct mac_mrf24j40_open_param 
 	ret = 0;
 
 	return ret;
+}
+int     MAC_wait_ready_to_write(struct mac_mrf24j40* mac, int timeout){
+	int i;
+	struct timespec abs_timeout;
+
+	__mac_mrf24j40_lock(mac);
+	for(i = 0; i < MAC_MRF24J40_WRITE_MAX_ITEMS; i++){
+		if((mac->write_items[i].flags & 0x01) == 0){
+			break;
+		}
+	}
+	__mac_mrf24j40_unlock(mac);
+	if( i < MAC_MRF24J40_WRITE_MAX_ITEMS) return 1;
+	else{
+		abs_timeout.tv_sec = timeout / 1000;
+		abs_timeout.tv_nsec= (timeout % 1000) * 1000000;
+		i = flag_event_timedwait(&mac->tx_event, &abs_timeout);
+		__mac_mrf24j40_lock(mac);
+		for(i = 0; i < MAC_MRF24J40_READ_MAX_ITEMS; i++){
+			if((mac->write_items[i].flags & 0x01) == 0){
+				break;
+			}
+		}
+		__mac_mrf24j40_unlock(mac);
+		if( i < MAC_MRF24J40_READ_MAX_ITEMS) return 1;
+	}
+	return 0;
 }
 int 	MAC_mrf24j40_read(struct mac_mrf24j40* mac, struct mac_mrf24j40_read_param * param, void* payload, int payload_maxlen, int timeout){
 	int ret = 0, i, hdr_len, payload_len;
@@ -589,7 +621,6 @@ int 	__mac_mrf24j40_write(struct mac_mrf24j40* mac, struct mac_mrf24j40_write_pa
 	if(frmCtrl.bits.ackReq == 1) i = 0x05;
 	else i = 0x01;
 	PHY_mrf24j40_setShortRAMAddr(&mac->phy, PHY_MRF24J40_WRITE_TXNMTRIG, i);
-
 	ret = 0;
 	return ret;
 }
@@ -683,6 +714,7 @@ int 	MAC_mrf24j40_task(struct mac_mrf24j40* mac){
 	if(flags.bits.RF_TXIF){
 		mac->flags |= ((uint8_t)1 << MAC_MRF24J40_FLAG_TX_DONE);	// set bit tx done
 		PHY_mrf24j40_getShortRAMAddr(&mac->phy, PHY_MRF24J40_READ_TXSR);
+		flag_event_post(&mac->tx_event);
 	}
 	if(flags.bits.RF_RXIF){
 		/* |frame_len(n+m+2)|header(m)|data(n)|FCS(2)|LQI(1)|RSSI(1)|

@@ -74,6 +74,7 @@ struct mac_mrf24j40{
     uint8_t         txSeq;
     flag_event_t    event;
     flag_event_t    rx_event;
+    flag_event_t    tx_event;
     sem_t           sem_access;
     uint8_t         flags;
     struct mac_mrf24j40_write_item  write_items[MAC_MRF24J40_WRITE_MAX_ITEMS];
@@ -141,6 +142,7 @@ int     MAC_mrf24j40_write(struct mac_mrf24j40* mac, struct mac_mrf24j40_write_p
 int     MAC_mrf24j40_read(struct mac_mrf24j40* mac, struct mac_mrf24j40_read_param* param, void* payload, int payload_maxlen, int timeout);
 int     MAC_mrf24j40_select(struct mac_mrf24j40* mac, int timeout);
 int     MAC_mrf24j40_ioctl(struct mac_mrf24j40* mac, int request, unsigned int arguments);
+int     MAC_wait_ready_to_write(struct mac_mrf24j40* mac, int timeout);
 
 int     MAC_mrf24j40_task(struct mac_mrf24j40* mac);
 

@@ -203,15 +203,12 @@ int 	spi_open	(struct platform_device *dev, int flags){
 		bank = gpio_get_bank_index(data->ss_pin);
 		pin = gpio_get_pin_index(data->ss_pin);		
 		RCC_AHB1PeriphClockCmd(g_gpio_bank_ref[bank].RCC_AHB1Periph_GPIOx, ENABLE);
+		GPIO_InitStruct.GPIO_Mode 	= GPIO_OUTPUT;
 		GPIO_InitStruct.GPIO_Pin 	= g_gpio_pin_ref[pin].GPIO_Pin;
-		GPIO_InitStruct.GPIO_Mode 	= GPIO_Mode_AF;
-		GPIO_InitStruct.GPIO_OType 	= GPIO_OType_PP;
-		GPIO_InitStruct.GPIO_Speed 	= GPIO_Speed_50MHz;
 		GPIO_InitStruct.GPIO_PuPd 	= GPIO_PuPd_NOPULL;
+		GPIO_InitStruct.GPIO_Speed 	= GPIO_Speed_100MHz;
+		GPIO_InitStruct.GPIO_OType 	= GPIO_OType_PP;
 		GPIO_Init(g_gpio_bank_ref[bank].GPIOx, &GPIO_InitStruct);
-		GPIO_PinAFConfig(g_gpio_bank_ref[bank].GPIOx, g_gpio_pin_ref[pin].GPIO_PinSource, GPIO_AF);
-		
-		SPI_SSOutputCmd(SPIx, ENABLE);
 	}
 	/* configure SPI in Mode 0 
 	 * CPOL = 0 --> clock is low when idle
@@ -258,6 +255,7 @@ int		spi_ioctl	(struct platform_device *dev, int request, unsigned int arguments
 	unsigned int  len;
 	unsigned int ival;
 	uint16_t scale_index;
+	int bank=0, pin=0;
 	
 	ret = -EPERM;
 	data = (struct spi_platform_data*)dev->dev.platform_data;
@@ -286,6 +284,11 @@ int		spi_ioctl	(struct platform_device *dev, int request, unsigned int arguments
 			}
 			if(ival)
 				SPI_Init(SPIx, &g_spi_driver_arch_data.SPI_InitStruct[dev->id]);
+			if(data->ss_pin != GPIO_PIN_INVALID){
+				bank = gpio_get_bank_index(data->ss_pin);
+				pin = gpio_get_pin_index(data->ss_pin);
+				GPIO_ResetBits(g_gpio_bank_ref[bank].GPIOx, g_gpio_pin_ref[pin].GPIO_Pin);
+			}
 			while(len > 0){
 				if(tx){
 					SPIx->DR = *tx;
@@ -307,6 +310,9 @@ int		spi_ioctl	(struct platform_device *dev, int request, unsigned int arguments
 				}
 				len --;
 				ret ++;
+			}
+			if(data->ss_pin != GPIO_PIN_INVALID){
+				GPIO_SetBits(g_gpio_bank_ref[bank].GPIOx, g_gpio_pin_ref[pin].GPIO_Pin);
 			}
 			break;
 		}

@@ -109,15 +109,15 @@ struct platform_device g_gpio_button_device = {
 	.id 		= gpio_get_pin('A', 0),	// A0
 	.next 		= 0,
 };
-struct platform_device g_gpio_rf_cs_device = {
-	.dev_name 	= "rf-cs",
-	.name     	= "gpio-drv",
-	.dev 		= {
-		.platform_data = &g_gpio_mrf_output_data,
-	},
-	.id 		= gpio_get_pin('A', 1),
-	.next 		= 0,
-};
+//struct platform_device g_gpio_rf_cs_device = {
+//	.dev_name 	= "rf-cs",
+//	.name     	= "gpio-drv",
+//	.dev 		= {
+//		.platform_data = &g_gpio_mrf_output_data,
+//	},
+//	.id 		= gpio_get_pin('A', 1),
+//	.next 		= 0,
+//};
 struct platform_device g_gpio_rf_reset_device = {
 	.dev_name 	= "rf-reset",
 	.name     	= "gpio-drv",
@@ -139,7 +139,7 @@ struct platform_device g_gpio_rf_intr_device = {
 /*spi*/
 struct spi_platform_data g_rf_data = {
 	.sck_pin 	= gpio_get_pin('B', 10),	// SPI_1
-	.ss_pin 	= GPIO_PIN_INVALID,
+	.ss_pin 	= gpio_get_pin('A', 1),
 	.mosi_pin 	= gpio_get_pin('C', 3),
 	.miso_pin 	= gpio_get_pin('C', 2),
 };
@@ -216,7 +216,7 @@ device_init(g_gpio_led_green_device);
 device_init(g_gpio_led_orange_device);
 device_init(g_gpio_led_blue_device);
 device_init(g_gpio_button_device);
-device_init(g_gpio_rf_cs_device);
+//device_init(g_gpio_rf_cs_device);
 device_init(g_gpio_rf_reset_device);
 device_init(g_gpio_rf_intr_device);
 
@@ -237,7 +237,7 @@ int board_register_devices(){
 	platform_device_register(&g_gpio_led_orange_device);
 	platform_device_register(&g_gpio_led_blue_device);
 	platform_device_register(&g_gpio_button_device);
-	platform_device_register(&g_gpio_rf_cs_device);
+//	platform_device_register(&g_gpio_rf_cs_device);
 	platform_device_register(&g_gpio_rf_reset_device);
 	platform_device_register(&g_gpio_rf_intr_device);
 	

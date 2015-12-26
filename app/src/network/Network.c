@@ -13,11 +13,13 @@
 #include <setting.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <string.h>
 
 struct setting_value		g_setting;
 
 #define NWK_LREP(x, args...) LREP("nwk: " x, ##args)
 #define NWK_LREP_WARN(x, args...) LREP("nwk %d@%s: " x, __LINE__, __FILE__,  ##args)
+#define NWK_PANID(nwk)	(((uint16_t)nwk->mac->phy.pan_id[0]) & 0x00FF) | ((((uint16_t)nwk->mac->phy.pan_id[1]) << 8) & 0xFF00)
 #define NETWORK_H_BAR_LEN	80
 int Network_scan_channel(struct mac_mrf24j40 *mac, uint32_t channels, uint8_t * noise_level){
 	int timeout = 1000;
@@ -67,7 +69,43 @@ int Network_scan_channel(struct mac_mrf24j40 *mac, uint32_t channels, uint8_t * 
 	return ret;
 }
 int Network_init(struct network *nwk){
+	int i = 0;
 	nwk->lock = 0;
+	nwk->parent_id = 0;
+	for(i = 0; i < NWK_CHILD_CNT; i++){
+		nwk->child[i].flags.bits.active = 0;
+	}
+	return 0;
+}
+int Network_add_child(struct network *nwk, uint8_t *long_address, uint16_t id){
+	int ret = -1;
+	int i, j;
+	for(i = 0;i < NWK_CHILD_CNT; i++){
+		if(nwk->child[i].flags.bits.active && nwk->child[i].id == id){
+			break;
+		}
+	}
+	if(i == NWK_CHILD_CNT){
+		// not found
+		for(i = 0;i < NWK_CHILD_CNT; i++){
+			if(!nwk->child[i].flags.bits.active){
+				nwk->child[i].flags.bits.active = 1;
+				nwk->child[i].id = id;
+				for(j = 0; j < 8; j++) nwk->child[i].long_address[j] = long_address[j];
+				ret = 0;
+				break;
+			}
+		}
+	}
+	return ret;
+}
+int Network_remove_child(struct network *nwk, uint16_t id){
+	int i;
+	for(i = 0;i < NWK_CHILD_CNT; i++){
+		if(nwk->child[i].flags.bits.active && nwk->child[i].id == id){
+			nwk->child[i].flags.bits.active = 0;
+		}
+	}
 	return 0;
 }
 int Network_beacon_request(struct network *nwk){
@@ -149,6 +187,35 @@ int Network_beacon_respond(struct network *nwk, uint64_t destLongAddress){
 	res->panId = (((uint16_t)nwk->mac->phy.pan_id[0]) & 0x00FF) | ((((uint16_t)nwk->mac->phy.pan_id[1]) << 8) & 0xFF00);
 	res->address = (((uint16_t)nwk->mac->phy.s_address[0]) & 0x00FF) | ((((uint16_t)nwk->mac->phy.s_address[1]) & 0x00FF) << 8);
 	len = sizeof(struct network_packet) - 1 + sizeof(struct network_args_beacon_res);
+
+	MAC_mrf24j40_write(nwk->mac, &write_param, pkt, len);
+	return ret;
+}
+int Network_join_send_done(struct network *nwk){
+	int ret = 0, i;
+	struct mac_mrf24j40_write_param write_param;
+	int len;
+	struct network_packet *pkt;
+	struct network_args_join_done *done;
+	uint8_t buff[32];
+
+	write_param.flags.bits.packetType 	= MAC_MRF24J40_PACKET_TYPE_DATA;
+	write_param.flags.bits.broadcast	= 0;
+	write_param.flags.bits.ackReq		= 0;
+	write_param.flags.bits.secEn		= 0;
+	write_param.flags.bits.intraPAN		= 0;
+	write_param.destPANId 				= NWK_PANID(nwk);
+	write_param.destAddress 			= nwk->parent_id;
+	write_param.srcAddressMode			= mac_iee802154_addrmode_16bit;
+	write_param.destAddressMode			= mac_iee802154_addrmode_16bit;
+
+	pkt = (struct network_packet*)buff;
+	done = (struct network_args_join_done*)pkt->args;
+	pkt->hops = 1;
+	pkt->type = network_packet_type_join_done;
+	for(i = 0; i < 8; i++) done->long_address[i] = nwk->mac->phy.l_address[i];
+
+	len = sizeof(struct network_packet) - 1 + sizeof(struct network_args_join_done);
 
 	MAC_mrf24j40_write(nwk->mac, &write_param, pkt, len);
 	return ret;
@@ -250,14 +317,21 @@ int Network_echo_respond(struct network *nwk, struct network_packet* pkt, int le
 	res_pkt->type = network_packet_type_echo_res;
 
 	req = (struct network_args_echo_req*)pkt->args;
-	if(req->length > NWK_ECHO_LENGTH_MAX) req->length = NWK_ECHO_LENGTH_MAX;
-	for(i = 0; i < req->length; i++){
-		res->data[i] = req->data[i];
-	}
-	len = sizeof(struct network_packet) - 1 + sizeof(struct network_args_echo_res);
-	res->length = req->length;
 
-	MAC_mrf24j40_write(nwk->mac, &write_param, res_pkt, len);
+	if((req->flags & 0x01) == 0){
+		if(req->length > NWK_ECHO_LENGTH_MAX) req->length = NWK_ECHO_LENGTH_MAX;
+#if 0
+		for(i = 0; i < req->length; i++){
+			res->data[i] = req->data[i];
+		}
+#else
+		memcpy(res->data, req->data, req->length);
+#endif
+		len = sizeof(struct network_packet) - 1 + sizeof(struct network_args_echo_res);
+		res->length = req->length;
+
+		MAC_mrf24j40_write(nwk->mac, &write_param, res_pkt, len);
+	}
 	return ret;
 }
 int Network_process_packet(struct network *nwk, struct network_packet* pkt, int len, struct mac_mrf24j40_read_param *read_param){
@@ -288,7 +362,14 @@ int Network_process_packet(struct network *nwk, struct network_packet* pkt, int 
 				//		read_param->rssi, read_param->lqi, address);
                 //DUMP(pkt, len, "recv echo");
 				Network_echo_respond(nwk, pkt, len, read_param);
-				LED_TOGGLE(ORANGE);
+				processed = 1;
+				break;
+			}
+			case network_packet_type_join_done:{
+				struct network_args_join_done* done = (struct network_args_join_done*)pkt->args;
+				NWK_LREP("recv join done from %04X, add to list child ...", ((uint16_t)read_param->srcAddr));
+				if(Network_add_child(nwk, done->long_address, read_param->srcAddr)) LREP("FAIL\r\n");
+				else LREP("done\r\n");
 				processed = 1;
 				break;
 			}
@@ -331,7 +412,7 @@ int Network_loop(struct network *nwk, int timeout){
     }else usleep(1000*100);
 	return ret;
 }
-int Network_echo_request(struct network *nwk, uint16_t address, int count, int datalen, struct network_echo_info* info){
+int Network_echo_request(struct network *nwk, uint16_t address, int count, int datalen, struct network_echo_info* info, int not_wait_res){
 	int ret = -1, i;
 	struct mac_mrf24j40_write_param write_param;
 	int len;
@@ -371,6 +452,7 @@ int Network_echo_request(struct network *nwk, uint16_t address, int count, int d
 	info->time_diff = 0;
 	if(datalen > NWK_ECHO_LENGTH_MAX) datalen = NWK_ECHO_LENGTH_MAX;
 	req->length = datalen;
+	req->flags = not_wait_res ? 1 : 0;
 
 	nwk->lock 		= 1;
 	usleep(1000* 200);
@@ -382,38 +464,54 @@ int Network_echo_request(struct network *nwk, uint16_t address, int count, int d
 		len = sizeof(struct network_packet) - 1 + sizeof(struct network_args_echo_req);
 
 		MAC_mrf24j40_write(nwk->mac, &write_param, pkt, len);
-        len = 0;
-        timeout_cnt = 2;
-        do{
-            len = MAC_mrf24j40_read(nwk->mac, &read_param, rx, 144, timeout);
-        }while(len == 0 && timeout_cnt --);
-		if(len >= sizeof(struct network_packet)-1){
-			if(nwk_packet->type == network_packet_type_echo_res){
-				i = 0;
-				if(res->length == req->length){
-					for(i = 0; i < datalen; i++){
-						if(res->data[i] != req->data[i]) break;
+
+		if(not_wait_res == 0){
+			len = 0;
+			timeout_cnt = 2;
+			do{
+				len = MAC_mrf24j40_read(nwk->mac, &read_param, rx, 144, timeout);
+			}while(len == 0 && timeout_cnt --);
+			if(len >= sizeof(struct network_packet)-1){
+				if(nwk_packet->type == network_packet_type_echo_res){
+					i = 0;
+#if 0
+					if(res->length == req->length){
+						for(i = 0; i < datalen; i++){
+							if(res->data[i] != req->data[i]) break;
+						}
 					}
-				}
-				if(i == datalen) {
-					info->passed ++;
-					failed_cnt = 0;
-                    //LREP("[%d]rx done\r\n", count);
+					if(i == datalen)
+#else
+					if(memcmp(res->data, req->data, datalen) == 0)
+#endif
+					{
+						info->passed ++;
+						failed_cnt = 0;
+						//LREP("[%d]rx done\r\n", count);
+					}else{
+						//LREP("false @ %d\r\n", i);
+						info->failed++;
+						//NWK_LREP_WARN("[%d]rx test failed @%d len %d\r\n", count, i, datalen);
+						//DUMP(req->data, datalen, "tx");
+						//DUMP(res->data, datalen, "rx");
+					}
 				}else{
-					LREP("false @ %d\r\n", i);
-					info->failed++;
-                    NWK_LREP_WARN("[%d]rx test failed @%d len %d\r\n", count, i, datalen);
-                    DUMP(req->data, datalen, "tx");
-                    DUMP(res->data, datalen, "rx");
+					NWK_LREP_WARN("[%d]packet type %02X not echo-res\r\n", count, nwk_packet->type);
+					info->timeout++;
+					Network_process_packet(nwk, nwk_packet, len, &read_param);
 				}
 			}else{
-				NWK_LREP_WARN("[%d]packet type %02X not echo-res\r\n", count, nwk_packet->type);
+				NWK_LREP_WARN("[%d]packet invalid length %u\r\n", count, len);
 				info->timeout++;
-				Network_process_packet(nwk, nwk_packet, len, &read_param);
 			}
 		}else{
-            NWK_LREP_WARN("[%d]packet invalid length %u\r\n", count, len);
-            info->timeout++;
+			if(MAC_wait_ready_to_write(nwk->mac, 100) != 1){
+				info->timeout++;
+			}
+			else{
+				info->passed ++;
+				failed_cnt = 0;
+			}
 		}
 		if(failed_cnt > 10) break;
 	}

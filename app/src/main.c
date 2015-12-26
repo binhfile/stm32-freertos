@@ -130,8 +130,8 @@ int main(void)
                 g_setting_dev.dev.fd_cs, g_setting_dev.dev.fd_sck,
                 g_setting_dev.dev.fd_mosi, g_setting_dev.dev.fd_miso);
     }
-    g_rf_mac_open.fd_cs = open(DEV_RF_CS_NAME, O_WRONLY);
-    if(g_rf_mac_open.fd_cs < 0) LREP("open spi cs device failed\r\n");
+    g_rf_mac_open.fd_cs = -1;//open(DEV_RF_CS_NAME, O_WRONLY);
+//    if(g_rf_mac_open.fd_cs < 0) LREP("open spi cs device failed\r\n");
     g_rf_mac_open.fd_reset = open(DEV_RF_RESET_NAME, O_WRONLY);
     if(g_rf_mac_open.fd_reset < 0) LREP("open rf-reset device failed\r\n");
     g_rf_mac_open.fd_intr = open(DEV_RF_INTR_NAME, O_RDONLY);
@@ -233,100 +233,126 @@ int main(void)
 
     // PAN Coordinator
     if(g_setting.network_type == setting_network_type_pan_coordinator){
-//        uint8_t noise_level[15];
-        uint8_t channels[15];
-        struct network_beacon_info nwk_info[1];
+        uint8_t channels[NWK_CHANNEL_CNT];
 
         LREP("Device as a PAN coordinator\r\n");
+#if 0
+        struct network_beacon_info nwk_info[1];
+        uint8_t noise_level[NWK_CHANNEL_CNT] = {0xff};
+        int j;
+
         LREP("Scan free channel\r\n");
-//        for(i =0 ;i < 15; i++) channels[i] = i + 11;
-//        Network_scan_channel(&g_rf_mac, 0x03fff800, noise_level);
-//        // sort noise level
-//        for(i = 0; i < 15-1; i++){
-//            for(j = i+1; j < 15; j++){
-//                if(noise_level[i] > noise_level[j]){
-//                    noise_level[i] ^= noise_level[j];
-//                    noise_level[j] ^= noise_level[i];
-//                    noise_level[i] ^= noise_level[j];
-//
-//                    channels[i] ^= channels[j];
-//                    channels[j] ^= channels[i];
-//                    channels[i] ^= channels[j];
-//                }
-//            }
-//        }
-        //for(i =0 ;i < 15; i++) channels[14-i] = i + 11;
-        i = 0;
-        channels[i] = 11;
-        //for(i = 0; i < 15; i++){
-            LREP("Detect network on channel %d ...", channels[i]);
-            ival = Network_detect_current_network(&g_nwk, channels[i], nwk_info, 1);
-            if(ival > 0) LREP("found network panId %04X\r\n", nwk_info[0].panId);
-            else {
-            	LREP("not found\r\n");
-//            	break;
+        for(i = 0 ;i < NWK_CHANNEL_CNT; i++) channels[i] = i + NWK_CHANNEL_MIN;
+        Network_scan_channel(&g_rf_mac, NWK_CHANNEL_MAP, noise_level);
+        // sort noise level
+        for(i = 0; i < NWK_CHANNEL_CNT-1; i++){
+            for(j = i+1; j < NWK_CHANNEL_CNT; j++){
+                if(noise_level[i] > noise_level[j]){
+                    noise_level[i] ^= noise_level[j];
+                    noise_level[j] ^= noise_level[i];
+                    noise_level[i] ^= noise_level[j];
+
+                    channels[i] ^= channels[j];
+                    channels[j] ^= channels[i];
+                    channels[i] ^= channels[j];
+                }
             }
-//        }
-        if(i == 15) LREP("Not found free channel\r\n");
-        else{
+        }
+        for(i = 0; i < NWK_CHANNEL_CNT; i++){
+        	if(NWK_CHANNEL_MAP & ((unsigned int)1) << channels[i]){
+				LREP("Detect network on channel %d ...", channels[i]);
+				ival = Network_detect_current_network(&g_nwk, channels[i], nwk_info, 1);
+				if(ival > 0){
+					struct network_echo_info info;
+					LREP("found network panId %04X\r\n", nwk_info[0].panId);
+					u8aVal[0] = nwk_info[0].panId & 0x00FF;
+					u8aVal[1] = ((nwk_info[0].panId & 0xFF00) >> 8);
+					LREP("Try to ping PAN coordinator ...");
+					MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_set_pan_id, (unsigned int)&u8aVal[0]);
+					Network_echo_request(&g_nwk, 0, 10, 95, &info);
+					if(info.passed < 8) LREP("FAIL\r\n");
+
+				}
+				else {
+					LREP("not found\r\n");
+					break;
+				}
+        	}
+        }
+        if(i == NWK_CHANNEL_CNT) LREP("Not found free channel\r\n");
+        else
+#else
+        i = 0;
+        channels[i] = NWK_CHANNEL_MIN;
+#endif
+        {
             uival = rand();
             u8aVal[0] = uival & 0x00FF;
             u8aVal[1] = ((uival & 0xFF00) >> 8);
             uival = channels[i];
+            LREP("Create network channel %d PANId %02X%02X\r\n", uival, u8aVal[1], u8aVal[0]);
 
             MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_set_channel, (unsigned int)&uival);
             MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_set_pan_id, (unsigned int)&u8aVal[0]);
             u8aVal[0] = 0; u8aVal[1] = 0;
             MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_set_short_address, (unsigned int)&u8aVal[0]);
-            LREP("Create network channel %d PANId %02X%02X\r\n", uival, u8aVal[1], u8aVal[0]);
         }
     }else if(g_setting.network_type == setting_network_type_router){
     	struct network_beacon_info nwk_info[1];
+		struct network_join_info join_info;
+		struct network_echo_info info;
+
+    	int found = 0;
     	LREP("Device as a Router device\r\n");
     	LREP("Join to new network\r\n");
-    	while(1){
+    	while(!found){
 			// Request a network
-    		i = 11;
-			//for(i = 25; i >= 11; i--){
-				LREP("Detect network on channel %d ...", i);
-				MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_reset, 0);
-				ival = Network_detect_current_network(&g_nwk, i, nwk_info, 1);
-				if(ival > 0){
-					LREP("found network panId %04X node %04X [rssi:%02X, lqi:%02X]\r\n",
-							nwk_info[0].panId, nwk_info[0].address,
-							nwk_info[0].rssi, nwk_info[0].lqi);
-					//break;
+			for(i = NWK_CHANNEL_MIN; i < NWK_CHANNEL_MAX; i++){
+				if(NWK_CHANNEL_MAP & ((unsigned int)1) << i){
+					LREP("Detect network on channel %d ...", i);
+					MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_reset, 0);
+					ival = Network_detect_current_network(&g_nwk, i, nwk_info, 1);
+					if(ival > 0){
+						LREP("found network panId %04X node %04X [rssi:%02X, lqi:%02X]\r\n",
+								nwk_info[0].panId, nwk_info[0].address,
+								nwk_info[0].rssi, nwk_info[0].lqi);
+						// try to join
+						if(Network_join_request(&g_nwk, i, nwk_info[0].panId, nwk_info[0].address, &join_info) == 0){
+							LREP("Join to network with address %04X\r\n", join_info.address);
+							u8aVal[0] = join_info.address & 0x00FF;
+							u8aVal[1] = (join_info.address >> 8) & 0x00FF;
+							MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_set_short_address, (unsigned int)&u8aVal[0]);
+							u8aVal[0] = nwk_info[0].panId & 0x00FF;
+							u8aVal[1] = (nwk_info[0].panId >> 8) & 0x00FF;
+							MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_set_pan_id, (unsigned int)&u8aVal[0]);
+							// ping test
+							LREP("Ping test connection ...");
+							Network_echo_request(&g_nwk, nwk_info[0].address, 10, 95, &info, 0);
+							if(info.passed < 8) LREP("FAIL\r\n");
+							else {
+								LREP("done\r\n");
+								g_nwk.parent_id = nwk_info[0].address;
+								Network_join_send_done(&g_nwk);
+								found = 1;
+								break;
+							}
+						}else{
+							LREP("Join failed\r\n");
+						}
+					}
+					else {
+						LREP("not found\r\n");
+					}
 				}
-				else {
-					LREP("not found\r\n");
-				}
-			//}
-			if(ival <= 0) LREP("Not found any network\r\n");
-			else{
-				struct network_join_info join_info;
-				// Request to join network
-				if(Network_join_request(&g_nwk, i, nwk_info[0].panId, nwk_info[0].address, &join_info) == 0){
-					LREP("Join to network with address %04X\r\n", join_info.address);
-					u8aVal[0] = join_info.address & 0x00FF;
-					u8aVal[1] = (join_info.address >> 8) & 0x00FF;
-					MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_set_short_address, (unsigned int)&u8aVal[0]);
-					u8aVal[0] = nwk_info[0].panId & 0x00FF;
-					u8aVal[1] = (nwk_info[0].panId >> 8) & 0x00FF;
-					MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_set_pan_id, (unsigned int)&u8aVal[0]);
-					break;
-				}else{
-					LREP("Join failed\r\n");
-
-				}
-			}
-    	}
+			}// end for
+    	}// end while
     }else{
     	LREP("Type invalid\r\n");
     	while(1){sleep(1);}
     }
 
     while(1){
-    	Network_loop(&g_nwk, 100);
+    	Network_loop(&g_nwk, 1000);
         LED_TOGGLE(BLUE);
     }
     return 0;
@@ -397,7 +423,7 @@ void* Thread_PhyIntr(void* param){
 }
 void *Thread_MiwiTask(void*param){
     while(1){
-        if(MAC_mrf24j40_select(&g_rf_mac, 100)){
+        if(MAC_mrf24j40_select(&g_rf_mac, 1000)){
             MAC_mrf24j40_task(&g_rf_mac);
         }
     }

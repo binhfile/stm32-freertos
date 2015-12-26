@@ -39,9 +39,10 @@ int cli_app_ping_callback(int argc, char** argv, void* user){
 				int ret;
 				int c;
 				int done = 1;
+				int one_dir = 0;
 
 				optind = 1;
-				while((c = getopt(argc, argv, "c:s:")) != -1){
+				while((c = getopt(argc, argv, "c:s:o")) != -1){
 					switch(c){
 						case 'c':{
 							cnt = strtol(optarg, 0, 10);
@@ -49,6 +50,10 @@ int cli_app_ping_callback(int argc, char** argv, void* user){
 						}
 						case 's':{
 							leng = strtol(optarg, 0, 10);
+							break;
+						}
+						case 'o':{
+							one_dir = 1;
 							break;
 						}
 						case '?':{
@@ -72,8 +77,8 @@ int cli_app_ping_callback(int argc, char** argv, void* user){
 					else if(leng > 95) leng = 95;
 
 					struct network_echo_info info;
-					LREP("\r\nPing to %04X count %u length %u\r\n", addr, cnt, leng);
-					ret = Network_echo_request(&g_nwk, addr, cnt, leng, &info);
+					LREP("\r\nPing to %04X count %u length %u %s\r\n", addr, cnt, leng, one_dir ? "one dir": "");
+					ret = Network_echo_request(&g_nwk, addr, cnt, leng, &info, one_dir);
 					LREP("Result:\r\n");
 					if(ret > 10) LREP("Failed long times\r\n");
 					LREP("Time:      %u ms\r\n", info.time_diff);
@@ -81,8 +86,10 @@ int cli_app_ping_callback(int argc, char** argv, void* user){
 					LREP("Successed: %u (%d%%)\r\n", info.passed, (info.total > 0) ? info.passed*100/info.total : 0);
 					LREP("Timeout:   %u\r\n", info.timeout);
 					LREP("Error:     %u\r\n", info.failed);
-					LREP("Arg speed: %u.%u KiB/s\r\n", info.passed*leng*1000 / info.time_diff / 1024,
-							(info.passed*leng*1000 / info.time_diff - (info.passed*leng * 1000 / info.time_diff / 1024)*1024)*10/1024);
+					int speed = info.passed*leng*1000 / info.time_diff;
+					LREP("Arg speed: %u.%u Kbps (%u.%u KiB)/s\r\n",
+							speed * 8 / 1024, ((speed*8 - (speed*8/1024)*1024)*10 / 1024),
+							speed / 1024, (speed - (speed / 1024)*1024)*10/1024);
 				}
 			}
 	   }

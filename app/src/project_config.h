@@ -12,6 +12,13 @@
 #include <asm/termios.h>
 #include <gpio.h>
 
+#define NWK_CHANNEL_MIN			11
+#define NWK_CHANNEL_MAX			25
+#define NWK_CHANNEL_CNT			(NWK_CHANNEL_MAX - NWK_CHANNEL_MIN + 1)
+#define NWK_CHANNEL_MAP			(0x02008800)
+#define NWK_CHILD_CNT			1
+
+
 #if defined(STM32F4XX)
 #define DEV_RF_NAME				"rf"
 #define DEV_RF_CS_NAME			"rf-cs"
