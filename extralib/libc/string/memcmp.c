@@ -59,13 +59,13 @@ unsigned char  memcmp (const  void        *p1_mem,
 
 
     if (size < 1) {                                             /* See Note #1.                                         */
-        return (!DEF_YES);
+        return (0);
     }
     if (p1_mem == (void *)0) {
-        return (!DEF_NO);
+        return (1);
     }
     if (p2_mem == (void *)0) {
-        return (!DEF_NO);
+        return (1);
     }
 
 

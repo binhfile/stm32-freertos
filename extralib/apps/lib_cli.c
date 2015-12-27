@@ -9,8 +9,8 @@
 #include <fcntl.h>
 #include <string.h>
 #include <debug.h>
-#if defined(OS_LINUX)
 #include <stdio.h>
+#if defined(OS_LINUX)
 #include <sys/select.h>
 #endif
 

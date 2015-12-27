@@ -294,7 +294,7 @@ int Network_join_respond(struct network *nwk, uint64_t destAddr){
 	return ret;
 }
 int Network_echo_respond(struct network *nwk, struct network_packet* pkt, int len, struct mac_mrf24j40_read_param *read_param){
-	int ret = 0, i;
+	int ret = 0;
 	struct mac_mrf24j40_write_param write_param;
 	struct network_packet *res_pkt;
 	struct network_args_echo_res *res;
@@ -463,52 +463,51 @@ int Network_echo_request(struct network *nwk, uint16_t address, int count, int d
 			req->data[i] = rand();
 		len = sizeof(struct network_packet) - 1 + sizeof(struct network_args_echo_req);
 
-		MAC_mrf24j40_write(nwk->mac, &write_param, pkt, len);
-
-		if(not_wait_res == 0){
-			len = 0;
-			timeout_cnt = 2;
-			do{
-				len = MAC_mrf24j40_read(nwk->mac, &read_param, rx, 144, timeout);
-			}while(len == 0 && timeout_cnt --);
-			if(len >= sizeof(struct network_packet)-1){
-				if(nwk_packet->type == network_packet_type_echo_res){
-					i = 0;
-#if 0
-					if(res->length == req->length){
-						for(i = 0; i < datalen; i++){
-							if(res->data[i] != req->data[i]) break;
+		if(MAC_wait_ready_to_write(nwk->mac, 100) != 1){
+			info->timeout++;
+		}
+		else{
+			MAC_mrf24j40_write(nwk->mac, &write_param, pkt, len);
+			if(not_wait_res == 0){
+				len = 0;
+				timeout_cnt = 2;
+				do{
+					len = MAC_mrf24j40_read(nwk->mac, &read_param, rx, 144, timeout);
+				}while(len == 0 && timeout_cnt --);
+				if(len >= sizeof(struct network_packet)-1){
+					if(nwk_packet->type == network_packet_type_echo_res){
+						i = 0;
+	#if 0
+						if(res->length == req->length){
+							for(i = 0; i < datalen; i++){
+								if(res->data[i] != req->data[i]) break;
+							}
 						}
-					}
-					if(i == datalen)
-#else
-					if(memcmp(res->data, req->data, datalen) == 0)
-#endif
-					{
-						info->passed ++;
-						failed_cnt = 0;
-						//LREP("[%d]rx done\r\n", count);
+						if(i == datalen)
+	#else
+						if(memcmp(res->data, req->data, datalen) == 0)
+	#endif
+						{
+							info->passed ++;
+							failed_cnt = 0;
+							//LREP("[%d]rx done\r\n", count);
+						}else{
+							//LREP("false @ %d\r\n", i);
+							info->failed++;
+							//NWK_LREP_WARN("[%d]rx test failed @%d len %d\r\n", count, i, datalen);
+							//DUMP(req->data, datalen, "tx");
+							//DUMP(res->data, datalen, "rx");
+						}
 					}else{
-						//LREP("false @ %d\r\n", i);
-						info->failed++;
-						//NWK_LREP_WARN("[%d]rx test failed @%d len %d\r\n", count, i, datalen);
-						//DUMP(req->data, datalen, "tx");
-						//DUMP(res->data, datalen, "rx");
+						NWK_LREP_WARN("[%d]packet type %02X not echo-res\r\n", count, nwk_packet->type);
+						info->timeout++;
+						Network_process_packet(nwk, nwk_packet, len, &read_param);
 					}
 				}else{
-					NWK_LREP_WARN("[%d]packet type %02X not echo-res\r\n", count, nwk_packet->type);
+					//NWK_LREP_WARN("[%d]packet invalid length %u\r\n", count, len);
 					info->timeout++;
-					Network_process_packet(nwk, nwk_packet, len, &read_param);
 				}
 			}else{
-				NWK_LREP_WARN("[%d]packet invalid length %u\r\n", count, len);
-				info->timeout++;
-			}
-		}else{
-			if(MAC_wait_ready_to_write(nwk->mac, 100) != 1){
-				info->timeout++;
-			}
-			else{
 				info->passed ++;
 				failed_cnt = 0;
 			}

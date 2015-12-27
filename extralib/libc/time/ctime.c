@@ -38,15 +38,6 @@ static bool is_leap_year(int year) {
 	return false;
 }
 
-char *ctime_r(const time_t *t, char *buff) {
-	struct tm *time = gmtime(t);
-
-	sprintf(buff, "%04d-%02d-%02d %02d:%02d:%02d",
-			time->tm_year + YEAR_1900, time->tm_mon + 1, time->tm_mday, time->tm_hour,
-			time->tm_min, time->tm_sec);
-	return buff;
-}
-
 char *ctime(const time_t *t) {
 	static char __buff[30];
 	return ctime_r(t, &__buff[0]);
@@ -137,26 +128,6 @@ static long days_of_month(int year, int month) {
 	return days_of_month;
 }
 
-
-char *asctime(const struct tm *timeptr) {
-    static char wday_name[7][4] = {
-        "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"
-    };
-    static char mon_name[12][4] = {
-        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
-    };
-    static char result[26];
-
-
-    sprintf(result, "%.3s %.3s%3d %.2d:%.2d:%.2d %d\n",
-        wday_name[timeptr->tm_wday],
-        mon_name[timeptr->tm_mon],
-        timeptr->tm_mday, timeptr->tm_hour,
-        timeptr->tm_min, timeptr->tm_sec,
-        1900 + timeptr->tm_year);
-    return result;
-}
 
 struct tm *localtime_r(const time_t *timep, struct tm *result) {
 	//TODO local time not use timezone now

@@ -2,7 +2,7 @@ extern int __errno ;
 #include "string.h"
 #include "str_def.h"
 #include <limits.h>
-
+#if 0
 void memcpy(void *pdest, const void *psrc, size_t size){
 		CPU_SIZE_T    size_rem;
 		CPU_SIZE_T    mem_gap_octets;
@@ -73,4 +73,4 @@ void memcpy(void *pdest, const void *psrc, size_t size){
 	 size_rem      -=  sizeof(CPU_INT08U);
 	}
 }
-
+#endif

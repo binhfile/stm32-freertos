@@ -15,6 +15,7 @@
 #include <mqueue.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <time.h>
 
 extern sem_t              			g_sem_debug;

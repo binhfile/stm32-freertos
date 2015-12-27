@@ -15,6 +15,7 @@ ifneq (,$(findstring stm32f4,$(TARGET)))
 	
 	ASOURCES+=$(shell find -L $(SRCDIR) -name '*.s')
 	ASOURCES+=$(HW_DIR)/Libraries/CMSIS/ST/STM32F4xx/Source/Templates/gcc_ride7/startup_stm32f4xx.s
+	ASOURCES+=$(EXTRALIB_DIR)/libc/string/stm32f4/memcpy_a.s
 	CSOURCES+=$(HW_DIR)/Utilities/STM32F4-Discovery/stm32f4_discovery.c
 	CSOURCES+=$(shell find -L $(SRCDIR)/bsp -name '*.c')
 	CSOURCES+=$(shell find -L $(HW_DIR)/Libraries/STM32F4xx_StdPeriph_Driver -name '*.c')

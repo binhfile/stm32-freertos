@@ -21,6 +21,7 @@
 #define DEF_ENABLED	1
 #define DEF_DISABLED 0
 #define LIB_MEM_CFG_ARG_CHK_EXT_EN DEF_ENABLED
+#define  DEF_OCTET_NBR_BITS                                8u
 
 #define STR_MAX_LEN	4096
 
