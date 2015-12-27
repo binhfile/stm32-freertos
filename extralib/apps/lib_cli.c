@@ -55,7 +55,7 @@ inline uint8_t lib_cli_is_char_valid(uint8_t val){
 	return (val >= '0' && val <= '9') ||
 			(val >= 'A' && val <= 'Z') ||
 			(val >= 'a' && val <= 'z') ||
-			(val == '-' || val == ' ' || val == '?' ||  val == '/' ||  val == ':');
+			(val == '-' || val == ' ' || val == '?' ||  val == '/' ||  val == ':' ||  val == '"');
 }
 inline uint8_t lib_cli_is_space(uint8_t val){
 	return ((val == ' '));
@@ -83,6 +83,7 @@ int lib_cli_process(struct lib_cli *inst, unsigned char* data, int length){
     static int argc_index = 0;
     static int argc_cnt;
     static int full = 0;
+    static int has_long_arg = 0;
 
 	for(i = 0; i < length; i++){
 		if(lib_cli_is_char_valid(data[i])){
@@ -102,30 +103,62 @@ int lib_cli_process(struct lib_cli *inst, unsigned char* data, int length){
 					i++;
 				}
 				if(i < buff_index){
-					argv[0] = (char*)&buff_process[i];
+					argv[0] = (char*)&buff_process[i];// assign first arg
 					argc_cnt = 1;
 				}
 				while(i < buff_index){
 					if(full) break;
-					if(lib_cli_is_space(buff_process[i])){
-						buff_process[i] = '\0';
-						if(argc_index == CLI_MAX_ARGV-1) {
-							full = 1;
-							break;
+					if(buff_process[i] == '"'){
+						if(!has_long_arg && (i + 1 < buff_index)){
+							has_long_arg = 1;
+							i++;
 						}
-						// new arg
-						if(i+1 < buff_index &&
-								!lib_cli_is_space(buff_process[i+1]) &&
-								argc_index < CLI_MAX_ARGV-1){
-							argc_index++;
-							argv[argc_cnt] = (char*)&buff_process[i+1];
-							argc_cnt++;
+					}
+					if(has_long_arg){
+						if(buff_process[i] == '"')
+						{
+							has_long_arg = 0;
+							buff_process[i] = '\0';
+							if(argc_index == CLI_MAX_ARGV-1) {
+								full = 1;
+								break;
+							}
+							// new arg
+							if(i+1 < buff_index &&
+									!lib_cli_is_space(buff_process[i+1]) &&
+									argc_index < CLI_MAX_ARGV-1){
+								argc_index++;
+								argv[argc_cnt] = (char*)&buff_process[i+1];
+								argc_cnt++;
+							}
+						}
+					}else{
+						if(lib_cli_is_space(buff_process[i]))
+						{
+							buff_process[i] = '\0';
+							if(argc_index == CLI_MAX_ARGV-1) {
+								full = 1;
+								break;
+							}
+							// new arg
+							if(i+1 < buff_index &&
+									!lib_cli_is_space(buff_process[i+1]) &&
+									argc_index < CLI_MAX_ARGV-1){
+								argc_index++;
+								argv[argc_cnt] = (char*)&buff_process[i+1];
+								argc_cnt++;
+							}
 						}
 					}
 					i++;
 				}// end while
 			}
 			if(argc_cnt > 0){
+				for(i = 1; i < argc_cnt; i++){
+					if(*(argv[i]) == '"'){
+						argv[i]++;
+					}
+				}
 				if(inst->cb_fxn){
 					inst->cb_fxn(argc_cnt, argv, inst->cb_user);
 				}
@@ -134,6 +167,7 @@ int lib_cli_process(struct lib_cli *inst, unsigned char* data, int length){
 			snprintf((char*)prompt, 31, "%s%c ", inst->hostname, inst->prompt);
 			lib_cli_write(prompt);
 			buff_index = 0;
+			has_long_arg = 0;
 		}// ENTER
 		else
 		{

@@ -85,6 +85,11 @@ INC+=$(shell find -L $(EXTRALIB_DIR)/apps -name '*.h' -exec dirname {} \; | uniq
 INC+=$(shell find -L $(EXTRALIB_DIR)/lib -name '*.h' -exec dirname {} \; | uniq)
 INC+=$(shell find -L $(SRCDIR)/src -name '*.h' -exec dirname {} \; | uniq)
 #INC+=$(shell find -L $(MESH_DIR) -name '*.h' -exec dirname {} \; | uniq)
+#regex lib
+SLRE_DIR=../opensource/slre
+CSOURCES+=$(shell find -L $(SLRE_DIR) -name '*.c')
+INC+=$(shell find -L $(SLRE_DIR) -name '*.h' -exec dirname {} \; | uniq)
+
 INCLUDES=$(INC:%=-I%)
 # Create object list
 OBJECTS+=$(CSRC_LIB:%.c=%.o)
