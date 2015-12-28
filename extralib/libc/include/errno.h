@@ -10,8 +10,6 @@
 #ifndef ERRNO_H_
 #define ERRNO_H_
 
-#include <posix_errno.h>
-
 #define ENOERR           0     /* No error */
 #define EPERM            1001  /* Not permitted */ /* FIXME: see issue 519 */
 #define ENOENT           2     /* No such entity */
