@@ -33,7 +33,7 @@ ifneq (,$(findstring stm32f4,$(TARGET)))
     BIN=outp.bin
 endif
 ifneq (,$(findstring freertos,$(TARGET)))
-	OS_DIR=../opensource/FreeRTOS
+	OS_DIR=../../opensource/FreeRTOS
 	CSOURCES+=$(shell find -L $(SRCDIR)/os -name '*.c')
 	CSOURCES+=$(shell find -L $(EXTRALIB_DIR)/libc -name '*.c')
 	CSOURCES+=$(shell find -L $(EXTRALIB_DIR)/linux/stm32f4_freertos -name '*.c')
