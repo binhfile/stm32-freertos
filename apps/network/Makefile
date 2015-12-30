@@ -4,14 +4,14 @@ TARGET=stm32f4-freertos
 
 BINDIR=bin
 SRCDIR=.
-EXTRALIB_DIR=../extralib
+EXTRALIB_DIR=../../extralib
 ASOURCES=
 CSOURCES=
 CXXSOURCES=
 ifneq (,$(findstring stm32f4,$(TARGET)))
 	TOOLCHAIN_DIR=/home/toolchain/stm32/gcc-arm-none-eabi-4_9-2015q3
 	CROSS_COMPILE=arm-none-eabi-
-	HW_DIR=../opensource/STM32F4-Discovery_FW_V1.1.0
+	HW_DIR=../../opensource/STM32F4-Discovery_FW_V1.1.0
 	
 	ASOURCES+=$(shell find -L $(SRCDIR) -name '*.s')
 	ASOURCES+=$(HW_DIR)/Libraries/CMSIS/ST/STM32F4xx/Source/Templates/gcc_ride7/startup_stm32f4xx.s
@@ -86,7 +86,7 @@ INC+=$(shell find -L $(EXTRALIB_DIR)/lib -name '*.h' -exec dirname {} \; | uniq)
 INC+=$(shell find -L $(SRCDIR)/src -name '*.h' -exec dirname {} \; | uniq)
 #INC+=$(shell find -L $(MESH_DIR) -name '*.h' -exec dirname {} \; | uniq)
 #regex lib
-SLRE_DIR=../opensource/slre
+SLRE_DIR=../../opensource/slre
 CSOURCES+=$(shell find -L $(SLRE_DIR) -name '*.c')
 INC+=$(shell find -L $(SLRE_DIR) -name '*.h' -exec dirname {} \; | uniq)
 
