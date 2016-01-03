@@ -19,4 +19,7 @@ int clock_gettime(clockid_t clk_id, struct timespec *tp){
 
 	return ret;
 }
+unsigned long   lseek (int __fd, unsigned long __offset, int __whence){
+	return 0;
+}
 //end of file

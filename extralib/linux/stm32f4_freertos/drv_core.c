@@ -4,6 +4,8 @@
 #include "fcntl.h"
 #include "FreeRTOS.h"
 
+#include <poll.h>
+
 int    errno = 0;
 struct platform_driver* g_list_drivers	= 0;
 extern init_fxn		___drv_init_begin;
@@ -397,6 +399,27 @@ int 	select(int fd, fd_set *readfds, fd_set *writefds,
 	}
 	return ret;
 #endif
+}
+int poll (struct pollfd *__fds, nfds_t __nfds, int __timeout){
+	int ret = -EPERM;
+	struct platform_driver *drv = 0;
+	struct platform_device **pdev = (struct platform_device **)&___dev_lookup_begin;
+	int readfd = 0, writefd = 0, errorfd = 0;
+	int s_timeout = 0;
+
+	int fd = __fds[0].fd;
+	__fds[0].revents = 0;
+	if(fd >= 0 && fd <= (&___dev_lookup_end - &___dev_lookup_begin)){
+		drv = (pdev[fd])->driver;
+		if(drv->select){
+			s_timeout = __timeout * portTICK_PERIOD_MS;
+			ret = drv->select(pdev[fd], &readfd, &writefd, &errorfd, s_timeout);
+			if(ret > 0){
+				__fds[0].revents = __fds[0].events;
+			}
+		}
+	}
+	return ret;
 }
 
 void 	FD_CLR	(int fd, fd_set *set){

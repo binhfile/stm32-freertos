@@ -9,7 +9,7 @@
 #include <unistd.h>
 #include <stdint.h>
 #include "gpio.h"
-
+#if defined(OS_FREERTOS)
 #define DRV_AT93C_SET_GPIO(fd, val)	{\
 	u8val = val;\
 	write(fd, &u8val, 1);\
@@ -18,13 +18,6 @@
 // counter_1us = Fosc * / 1.000.000 / 4 = 45
 #define DRV_AT93C_DELAY_SCK(dev) {volatile int __i = 45; while(__i--){}}	// 1us
 #define DRV_AT93C_DELAY_CS(dev) {volatile int __i = 45; while(__i--){}}		// 250 ns
-#define DRV_AT93C_W_BIT(dev, val)	{\
-	DRV_AT93C_SET_GPIO(dev->fd_mosi, val); \
-	DRV_AT93C_SET_GPIO(dev->fd_sck, 1); \
-	DRV_AT93C_DELAY_SCK(dev); \
-	DRV_AT93C_SET_GPIO(dev->fd_sck, 0); \
-	DRV_AT93C_DELAY_SCK(dev); \
-}
 #define DRV_AT93C_R_BIT(dev, ret) {\
 	DRV_AT93C_SET_GPIO(dev->fd_sck, 1); \
 	DRV_AT93C_DELAY_SCK(dev); \
@@ -37,6 +30,43 @@
 		read(dev->fd_miso, &u8val, 1);\
 		if(u8val == 0) usleep(1000);\
 	}while(u8val == 0);\
+}
+#elif defined(OS_LINUX)
+#define DRV_AT93C_SET_GPIO(fd, val)	{\
+	lseek(fd, 0, SEEK_SET);\
+	if(val)\
+		write(fd, "1", 1);\
+	else \
+		write(fd, "0", 1);\
+}
+// Fosc = 180.000.000
+// counter_1us = Fosc * / 1.000.000 / 4 = 45
+#define DRV_AT93C_DELAY_SCK(dev) {volatile int __i = 450; while(__i--){}}	// 1us
+#define DRV_AT93C_DELAY_CS(dev) {volatile int __i = 450; while(__i--){}}		// 250 ns
+#define DRV_AT93C_R_BIT(dev, ret) {\
+	DRV_AT93C_SET_GPIO(dev->fd_sck, 1); \
+	DRV_AT93C_DELAY_SCK(dev); \
+	lseek(dev->fd_miso, 0, SEEK_SET);\
+	read(dev->fd_miso, &ret, 1);\
+	ret = (ret == '1') ? 1 : 0;\
+	DRV_AT93C_SET_GPIO(dev->fd_sck, 0); \
+	DRV_AT93C_DELAY_SCK(dev); \
+}
+#define DRV_AT93C_WAIT_W_DONE(dev) {\
+	do{\
+		lseek(dev->fd_miso, 0, SEEK_SET);\
+		read(dev->fd_miso, &u8val, 1);\
+		if(u8val == '0') usleep(1000);\
+	}while(u8val == '0');\
+}
+#endif
+
+#define DRV_AT93C_W_BIT(dev, val)	{\
+	DRV_AT93C_SET_GPIO(dev->fd_mosi, val); \
+	DRV_AT93C_SET_GPIO(dev->fd_sck, 1); \
+	DRV_AT93C_DELAY_SCK(dev); \
+	DRV_AT93C_SET_GPIO(dev->fd_sck, 0); \
+	DRV_AT93C_DELAY_SCK(dev); \
 }
 int at93c_enable_write(struct at93c_device* dev){
 	uint8_t u8val;

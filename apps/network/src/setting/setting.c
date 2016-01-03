@@ -93,31 +93,10 @@ uint8_t hex_to_dec(uint8_t hex){
 //	}
 //}
 int setting_read(struct setting_device* dev, struct setting_value* val){
-#if defined(OS_FREERTOS)
 	return at93c_read(&g_setting_dev.dev, 0, val, sizeof(struct setting_value));
-#elif defined(OS_LINUX)
-	FILE* f = fopen("config.bin", "rb");
-	int len = 0;
-	memset(val, 0, sizeof(struct setting_value));
-	if(f){
-		len = fread(val, 1, sizeof(struct setting_value), f);
-		fclose(f);
-	}
-	return len;
-#endif
 }
 int setting_write(struct setting_device* dev, struct setting_value* val){
-#if defined(OS_FREERTOS)
 	return at93c_write(&g_setting_dev.dev, 0, val, sizeof(struct setting_value));
-#elif defined(OS_LINUX)
-	FILE* f = fopen("config.bin", "wb");
-	int len = 0;
-	if(f){
-		len = fwrite(val, 1, sizeof(struct setting_value), f);
-		fclose(f);
-	}else LREP("Open file failed\r\n");
-	return len;
-#endif
 }
 
 // end of file

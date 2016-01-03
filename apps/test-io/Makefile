@@ -1,7 +1,6 @@
 #TARGET=stm32f4-freertos
 TARGET=arm-linux
 
-
 BINDIR=bin
 SRCDIR=.
 EXTRALIB_DIR=../../extralib
@@ -79,10 +78,12 @@ OD=$(TOOLCHAIN_DIR)/bin/$(CROSS_COMPILE)objdump
 SIZE=$(TOOLCHAIN_DIR)/bin/$(CROSS_COMPILE)size
 READELF=$(TOOLCHAIN_DIR)/bin/$(CROSS_COMPILE)readelf
 
-CSOURCES+=$(shell find -L $(SRCDIR)/src -name '*.c')
-CXXSOURCES+=$(shell find -L $(SRCDIR)/src -name '*.cpp')
+CSOURCES+=$(SRCDIR)/src/debug.c
 INC+=$(shell find -L $(SRCDIR)/src -name '*.h' -exec dirname {} \; | uniq)
 #regex lib
+
+CSOURCES+=$(SRCDIR)/src/main.c
+#CSOURCES+=$(SRCDIR)/src/main-bitbang.c
 
 INCLUDES=$(INC:%=-I%)
 # Create object list
@@ -134,7 +135,6 @@ $(BINDIR)/$(BINELF): $(OBJECTS)
 	$(SIZE) $(BINDIR)/$(BINELF)
 	#$(READELF) -e $(BINDIR)/$(BINELF)
 endif
-
 $(BINDIR)/$(OUTFILE): $(OBJECTS)
 	@ $(CC) $(LDFLAGS) $(OBJECTS) -o $@
 	@echo "Linking complete!"

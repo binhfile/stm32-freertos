@@ -14,6 +14,9 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
+#include <time.h>
+
+#define time_diff(now, ref)		((now.tv_sec * 1000 + now.tv_nsec / 1000000) - (ref.tv_sec * 1000 + ref.tv_nsec / 1000000))
 
 struct setting_value		g_setting;
 
@@ -136,30 +139,47 @@ int Network_beacon_request(struct network *nwk){
 	return 0;
 }
 int Network_detect_current_network(struct network *nwk, unsigned int channel, struct network_beacon_info *info, int info_max_count){
-	int ret = 0;
+	int ret = 0, i;
 	int ival;
     struct mac_mrf24j40_read_param read_param;
     struct network_packet* nwk_packet;
     struct network_args_beacon_res *res;
     char buff[32];
+    struct timespec t_ref, t_now;
 
 	MAC_mrf24j40_ioctl(nwk->mac, mac_mrf24j40_ioc_set_channel, (unsigned int)&channel);
-	Network_beacon_request(nwk);
+	MAC_mrf24j40_ioctl(nwk->mac, mac_mrf24j40_ioc_reset, 0);
 
-	ival = MAC_mrf24j40_read(nwk->mac, &read_param, buff, 32, 1000);
-	if(ival >= sizeof(struct network_packet)-1 + sizeof(struct network_args_beacon_res)){
-		nwk_packet = (struct network_packet*)buff;
-		res = (struct network_args_beacon_res *)nwk_packet->args;
-		if(nwk_packet->type == network_packet_type_beacon_res){
-			info[ret].panId = res->panId;
-			info[ret].address = res->address;
-			info[ret].rssi  = read_param.rssi;
-			info[ret].lqi   = read_param.lqi;
-			ret++;
-		}
-	}else if(ival > 0){
-		NWK_LREP("recv %d bytes\r\n", ival);
+	clock_gettime(CLOCK_REALTIME, &t_ref);
+	Network_beacon_request(nwk);
+	do{
+		ival = MAC_mrf24j40_read(nwk->mac, &read_param, buff, 32, 1000);
+		if(ival >= sizeof(struct network_packet)-1 + sizeof(struct network_args_beacon_res)){
+			nwk_packet = (struct network_packet*)buff;
+			res = (struct network_args_beacon_res *)nwk_packet->args;
+			if(nwk_packet->type == network_packet_type_beacon_res){
+				for(i = 0; i < ret; i++){
+					if(		info[i].panId == res->panId &&
+							info[i].address == res->address &&
+							info[i].rssi  == read_param.rssi &&
+							info[i].lqi   == read_param.lqi)
+						break;
+				}
+				if(i == ret){
+					info[ret].panId = res->panId;
+					info[ret].address = res->address;
+					info[ret].rssi  = read_param.rssi;
+					info[ret].lqi   = read_param.lqi;
+					ret++;
+				}
+				//break;
+			}else NWK_LREP("recv type %02X not beacon respond type\r\n", nwk_packet->type);
+		}else if(ival > 0){
+			NWK_LREP("recv %d bytes\r\n", ival);
+		}else break;
+		clock_gettime(CLOCK_REALTIME, &t_now);
 	}
+	while((time_diff(t_now, t_ref) < 1000) && (ret < info_max_count));
 	return ret;
 }
 int Network_beacon_respond(struct network *nwk, uint64_t destLongAddress){
@@ -228,12 +248,13 @@ int Network_join_request(struct network *nwk, unsigned int channel, uint16_t pan
 	struct network_args_join_res *res;
 	struct mac_mrf24j40_read_param read_param;
 	uint8_t buff[32];
+	struct timespec t_ref, t_now;
 
 	MAC_mrf24j40_ioctl(nwk->mac, mac_mrf24j40_ioc_set_channel, (unsigned int)&channel);
 
 	write_param.flags.bits.packetType 	= MAC_MRF24J40_PACKET_TYPE_DATA;
 	write_param.flags.bits.broadcast	= 0;
-	write_param.flags.bits.ackReq		= 0;
+	write_param.flags.bits.ackReq		= 1;
 	write_param.flags.bits.secEn		= 0;
 	write_param.flags.bits.intraPAN		= 0;
 	write_param.destPANId 				= panId;
@@ -245,20 +266,25 @@ int Network_join_request(struct network *nwk, unsigned int channel, uint16_t pan
 	pkt->hops = 1;
 	pkt->type = network_packet_type_join_req;
 	len = sizeof(struct network_packet) - 1 + sizeof(struct network_args_join_req);
+	MAC_mrf24j40_ioctl(nwk->mac, mac_mrf24j40_ioc_reset, 0);
 
-	MAC_mrf24j40_write(nwk->mac, &write_param, pkt, len);
-	// get request
-	len = MAC_mrf24j40_read(nwk->mac, &read_param, buff, 32, 1000);
-	if(len >= sizeof(struct network_packet)-1 + sizeof(struct network_args_join_res)){
-		pkt = (struct network_packet*)buff;
-		res = (struct network_args_join_res *)pkt->args;
-		if(pkt->type == network_packet_type_join_res){
-			info->address = res->address;
-			ret = 0;
+	clock_gettime(CLOCK_REALTIME, &t_ref);
+	MAC_mrf24j40_write(nwk->mac, &write_param, pkt, len);	// get request
+	do{
+		len = MAC_mrf24j40_read(nwk->mac, &read_param, buff, 32, 1000);
+		if(len >= sizeof(struct network_packet)-1 + sizeof(struct network_args_join_res)){
+			pkt = (struct network_packet*)buff;
+			res = (struct network_args_join_res *)pkt->args;
+			if(pkt->type == network_packet_type_join_res){
+				info->address = res->address;
+				ret = 0;
+				break;
+			}else NWK_LREP("recv type %2X not join respond type\r\n", pkt->type);
+		}else if(len > 0){
+			NWK_LREP("recv %d bytes\r\n", len);
 		}
-	}else if(len > 0){
-		NWK_LREP("recv %d bytes\r\n", len);
-	}
+		clock_gettime(CLOCK_REALTIME, &t_now);
+	}while(time_diff(t_now, t_ref) < 1000);
 	return ret;
 }
 int Network_join_respond(struct network *nwk, uint64_t destAddr){
@@ -374,7 +400,8 @@ int Network_process_packet(struct network *nwk, struct network_packet* pkt, int 
 				break;
 			}
 		}
-		if(processed == 0 && g_setting.network_type == setting_network_type_pan_coordinator){
+		if(processed == 0 && (g_setting.network_type == setting_network_type_pan_coordinator ||
+				g_setting.network_type == setting_network_type_router)){
 			switch(pkt->type){
 				case network_packet_type_join_req:{
 					// request to join
@@ -456,6 +483,7 @@ int Network_echo_request(struct network *nwk, uint16_t address, int count, int d
 
 	nwk->lock 		= 1;
 	usleep(1000* 200);
+	MAC_mrf24j40_ioctl(nwk->mac, mac_mrf24j40_ioc_reset, 0);
 	clock_gettime(CLOCK_REALTIME, &t_ref);
 	while(count -- && kb_value() != 0x03){
 		failed_cnt++;

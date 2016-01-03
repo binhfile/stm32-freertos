@@ -7,12 +7,12 @@
 #include <debug.h>
 #include <rf_def.h>
 
-#include <linux/spi/spidev.h>
-#include <sys/ioctl.h>
-#include <errno.h>
-
 struct device_rf{
-	int spi_fd;
+	int spi_cs;
+	int spi_sck;
+	int spi_mosi;
+	int spi_miso;
+
 	int intr_fd;
 	int reset_fd;
 };
@@ -31,34 +31,70 @@ struct device_fd g_devFD;
 
 int device_init(struct device_fd* fd);
 
-int gpio_write_low(int fd){
+static inline int gpio_write_low(int fd){
 	lseek(fd, 0, SEEK_SET);
 	return write(fd, "0", 1);
 }
-int gpio_write_high(int fd){
+static inline int gpio_write_high(int fd){
 	lseek(fd, 0, SEEK_SET);
 	return write(fd, "1", 1);
 }
-int spi_readwrite(int fd, void* tx, void* rx, int len){
+static inline int gpio_read(int fd){
+	unsigned char rx;
+	lseek(fd, 0, SEEK_SET);
+	read(fd, &rx, 1);
+	if(rx == '1') return 1;
+	return 0;
+}
+static inline void spi_bitbang_delay(){
+	volatile int i = 100;
+	while(i--){}
+}
+static inline unsigned char spi_bitbang_xfer(int sck_fd, int mosi_fd, int miso_fd, unsigned char tx){
+	unsigned char rx = 0;
+	int i = 7;
+	// write low SCK
+	gpio_write_low(sck_fd);
+	while(i >= 0){
+		// write to MOSI
+		if(tx & (((unsigned int)1) << i)) gpio_write_high(mosi_fd);
+		else gpio_write_low(mosi_fd);
+		spi_bitbang_delay();
+		spi_bitbang_delay();
+		// write SCK to HIGH
+		gpio_write_high(sck_fd);
+		// read MISO
+		spi_bitbang_delay();
+		rx |= ((((unsigned char)gpio_read(miso_fd)) & (unsigned char)0x01) << i);
+		spi_bitbang_delay();
+		gpio_write_low(sck_fd);
+		i--;
+	}
+	return rx;
+}
+
+int spi_readwrite(struct device_rf *rf, void* tx, void* rx, int len){
 	int ret;
-	struct spi_ioc_transfer xfer ={
-		.tx_buf			= (unsigned long)tx,
-		.rx_buf 		= (unsigned long)rx,
-		.bits_per_word 	= 8,
-		.speed_hz 		= 1000000,
-		.len			= len,
-		.delay_usecs	= 0,
-	};
-	ret = ioctl(fd, SPI_IOC_MESSAGE(1), &xfer);
-	if(ret < 0) LREP("ioctl %d len %d tx %p rx %p failed %d\r\n", fd, len, tx, rx, ret);
+	int i;
+	unsigned char* ptx = (unsigned char*)tx;
+	unsigned char* prx = (unsigned char*)rx;
+	i = 0;
+	gpio_write_low(rf->spi_cs);
+	spi_bitbang_delay();
+	while(i < len){
+		prx[i] = spi_bitbang_xfer(rf->spi_sck, rf->spi_mosi, rf->spi_miso, ptx[i]);
+		i++;
+	}
+	gpio_write_high(rf->spi_cs);
+	spi_bitbang_delay();
 	return 0;
 }
 unsigned char rf_read_short_reg(struct device_rf *rf, unsigned char reg){
 	unsigned char tx[2], rx[2];
 	tx[0] 			= reg;
-	tx[1]			= 0;
+	tx[1]			= 0xCC;
 	rx[1] 			= 0;
-	spi_readwrite(rf->spi_fd, tx, rx, 2);
+	spi_readwrite(rf, tx, rx, 2);
 	return rx[1];
 }
 unsigned char rf_read_long_reg(struct device_rf *rf, unsigned short reg){
@@ -67,14 +103,14 @@ unsigned char rf_read_long_reg(struct device_rf *rf, unsigned short reg){
 	tx[1] = ((reg << 5)&0xE0);
 	tx[2] = 0;
 	rx[2] = 0;
-	spi_readwrite(rf->spi_fd, tx, rx, 3);
+	spi_readwrite(rf, tx, rx, 3);
 	return rx[2];
 }
 int rf_write_short_reg(struct device_rf *rf, unsigned char reg, unsigned char val, int check){
 	unsigned char tx[2], rx[2], fb;
 	tx[0] = reg;
 	tx[1] = val;
-	spi_readwrite(rf->spi_fd, tx, rx, 2);
+	spi_readwrite(rf, tx, rx, 2);
 	if(check){
 		fb = rf_read_short_reg(rf, reg & (~((unsigned char)0x01)));
 		if(fb != val)
@@ -87,7 +123,7 @@ int rf_write_long_reg(struct device_rf *rf, unsigned short reg, unsigned char va
 	tx[0] = (((reg >> 3))&0x7F) | 0x80;
 	tx[1] = (((reg << 5))&0xE0) | 0x10;
 	tx[2] = val;
-	spi_readwrite(rf->spi_fd, tx, rx, 2);
+	spi_readwrite(rf, tx, rx, 2);
 
 	if(check){
 		fb = rf_read_short_reg(rf, reg);
@@ -133,46 +169,95 @@ int main(void)
     		rf_write_short_reg(&g_devFD.rf, PHY_WRITE_EADR0 + i * 2, i, 1);
     	}
     }
-
-    while(1){
-        sleep(1);
-        return 0;
+    int cnt = 10;
+    while(cnt--){
+       sleep(1);
+       return 0;
     }
     LREP("EXIT\r\n");
 }
 
 int device_init(struct device_fd* pfd){
 
-	int fd = open("/sys/class/gpio/export", O_WRONLY);
-	if(fd){
-		write(fd, "17", 2);
-		close(fd);
+	struct gpio_info{
+		int num;
+		int dir;
+		int edge;
+	};
+	struct gpio_info gpios[] = {
+			{
+					.num = 17,
+					.dir = 0,
+			},// intr
+			{
+					.num = 11,
+					.dir = 0,
+			},// sck
+			{
+					.num = 10,
+					.dir = 0,
+			},// mosi
+			{
+					.num = 9,
+					.dir = 1,
+					.edge = 0,
+			},// miso
+			{
+					.num = 8,
+					.dir = 0,
+			},// cs
+	};
+
+	int i;
+	int fd;
+	char buffer[64];
+	for(i = 0; i < sizeof(gpios) / sizeof(struct gpio_info); i++){
+		fd = open("/sys/class/gpio/export", O_WRONLY);
+		if(fd >= 0){
+			snprintf(buffer, 63, "%d", gpios[i].num);
+			write(fd, buffer, strlen(buffer));
+			close(fd);
+			snprintf(buffer, 63, "/sys/class/gpio/gpio%d/direction", gpios[i].num);
+			fd = open(buffer, O_WRONLY);
+			if(fd >= 0){
+				if(gpios[i].dir == 0)
+					snprintf(buffer, 63, "out");
+				else
+					snprintf(buffer, 63, "in");
+				write(fd, buffer, strlen(buffer));
+				close(fd);
+			}
+			if(gpios[i].dir == 1){
+				snprintf(buffer, 63, "/sys/class/gpio/gpio%d/edge", gpios[i].num);
+				fd = open(buffer, O_WRONLY);
+				if(fd >= 0){
+					if(gpios[i].edge == 1) snprintf(buffer, 63, "falling");
+					else if(gpios[i].edge == 2) snprintf(buffer, 63, "rising");
+					else snprintf(buffer, 63, "none");
+					write(fd, buffer, strlen(buffer));
+					close(fd);
+				}
+			}
+		}
 	}
-	fd = open("/sys/class/gpio/gpio17/direction", O_WRONLY);
-	if(fd){
-		write(fd, "out", 3);
-		close(fd);
-	}
+
 	pfd->rf.reset_fd = open("/sys/class/gpio/gpio17/value", O_WRONLY);
-	pfd->rf.spi_fd = open("/dev/spidev0.0", O_RDWR);
-	if(pfd->rf.spi_fd < 0){
-		LREP("open spi device '%s' failed %d\r\n", "/dev/spidev0.0", pfd->rf.spi_fd);
-	}
-	else{
-		LREP("pfd->rf.spi_fd=%d\r\n", pfd->rf.spi_fd);
-		unsigned int uival = SPI_MODE_0;
-		if(ioctl(pfd->rf.spi_fd, SPI_IOC_WR_MODE, (unsigned int)&uival) != 0) LREP("ioctl spi mode failed\r\n");
-		uival = SPI_MODE_0;
-		if(ioctl(pfd->rf.spi_fd, SPI_IOC_RD_MODE, (unsigned int)&uival) != 0) LREP("ioctl spi mode failed\r\n");
-		uival = 1000000;
-		if(ioctl(pfd->rf.spi_fd, SPI_IOC_WR_MAX_SPEED_HZ, (unsigned int)&uival) != 0) LREP("ioctl spi speed failed\r\n");
-		uival = 1000000;
-		if(ioctl(pfd->rf.spi_fd, SPI_IOC_RD_MAX_SPEED_HZ, (unsigned int)&uival) != 0) LREP("ioctl spi speed failed\r\n");
-		uival = 8;
-		if(ioctl(pfd->rf.spi_fd, SPI_IOC_WR_BITS_PER_WORD, (unsigned int)&uival) != 0) LREP("ioctl spi bpw failed\r\n");
-		uival = 8;
-		if(ioctl(pfd->rf.spi_fd, SPI_IOC_RD_BITS_PER_WORD, (unsigned int)&uival) != 0) LREP("ioctl spi bpw failed\r\n");
-	}
+	pfd->rf.spi_sck  = open("/sys/class/gpio/gpio11/value", O_WRONLY);
+	pfd->rf.spi_mosi = open("/sys/class/gpio/gpio10/value", O_WRONLY);
+	pfd->rf.spi_miso = open("/sys/class/gpio/gpio9/value", O_RDONLY);
+	pfd->rf.spi_cs   = open("/sys/class/gpio/gpio8/value", O_WRONLY);
+
+//	unsigned char tx[32], rx[32];
+//	LREP("\r\n");
+//	for(i = 0; i < 32; i++){
+//		tx[i] = i;
+//		rx[i] = 0;
+//
+//		rx[i] = spi_bitbang_xfer(pfd->rf.spi_sck, pfd->rf.spi_mosi, pfd->rf.spi_miso, tx[i]);
+//		if(i % 16 == 0) LREP("\r\n");
+//		LREP("%02X ", rx[i]);
+//	}
+//	LREP("\r\n");
     return 0;
 }
 #else

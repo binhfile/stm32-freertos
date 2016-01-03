@@ -18,6 +18,8 @@
 #include <stdio.h>
 #include <time.h>
 
+#include <stdint.h>
+
 extern sem_t              			g_sem_debug;
 extern mqd_t              			g_debug_tx_buffer;
 extern int                 			g_fd_debug_rx;
@@ -44,9 +46,11 @@ void LREP(char* s, ...){
 #endif
     sem_post(&g_sem_debug);
 }
+#ifndef isprint
 int isprint(unsigned char ch){
     return ((ch >= 32) && (ch <= 126));
 }
+#endif
 void DUMP(const void* data, int len, const char* string, ...)
 {
     uint8_t* p = (uint8_t*)data;

@@ -171,8 +171,12 @@ int lib_cli_process(struct lib_cli *inst, unsigned char* data, int length){
 		}// ENTER
 		else
 		{
-			if(data[i] == 0x08){// backspace
+			if(data[i] == 0x08 || data[i] == 0x7F){// backspace
 				if(buff_index > 0){
+#if defined(OS_FREERTOS)
+#elif defined(OS_LINUX)
+					data[i] = 0x08;
+#endif
 					write(inst->fd_write, &data[i], 1);
 					data[i] = ' ';
 					write(inst->fd_write, &data[i], 1);
@@ -186,7 +190,7 @@ int lib_cli_process(struct lib_cli *inst, unsigned char* data, int length){
 				lib_cli_write("\r\n");
 				lib_cli_write(prompt);
 			}
-			//else LREP("{%02X}", buff[i]);
+//			else LREP("{%02X}", data[i]);
 		}
 	}
 

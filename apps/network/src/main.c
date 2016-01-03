@@ -10,6 +10,8 @@
 #include <mqueue.h>
 #include <string.h>
 #include <stdlib.h>
+#include <poll.h>
+#include <reboot.h>
 
 #include <Test.h>
 #include <Network.h>
@@ -39,12 +41,12 @@ void *Thread_DebugTX(void*);
     pthread_create(&thread_##fxn, &thread_attr_##fxn, fxn, 0);\
 }
 #elif defined(OS_LINUX)
+#include <stdio.h>
 #define             APP_THREAD_COUNT    	3
 #define DEFINE_THREAD(fxn, stack_size, priority) \
 	pthread_t thread_##fxn;\
 	{\
     pthread_create(&thread_##fxn, 0, fxn, 0);\
-    g_thread_index++;\
 }
 #endif
 
@@ -63,6 +65,7 @@ uint8_t g_kb_value = 0;
 inline uint8_t kb_value(){
     return g_kb_value;
 }
+struct termios2 g_stdin_opt;
 int main(void)
 {
     int i, ival;
@@ -136,61 +139,113 @@ int main(void)
     if(g_rf_mac_open.fd_reset < 0) LREP("open rf-reset device failed\r\n");
     g_rf_mac_open.fd_intr = open(DEV_RF_INTR_NAME, O_RDONLY);
     if(g_rf_mac_open.fd_intr < 0) LREP("open rf-intr device failed\r\n");
+    g_rf_mac_open.fd_spi = open("rf", O_RDWR);
+
 #elif defined(OS_LINUX)
     g_fd_debug_tx = STDOUT_FILENO;
     g_fd_debug_rx = STDIN_FILENO;
     ioctl(g_fd_debug_rx, TCGETS2, &opt);
+    memcpy(&g_stdin_opt, &opt, sizeof(g_stdin_opt));
 	opt.c_cc[VMIN]  = 1;
 	opt.c_cc[VTIME] = 0;
 	opt.c_lflag &= ~(ICANON | ECHO);
 	ioctl(g_fd_debug_rx, TCSETS2, &opt);
 
-    int _fd = open("/sys/class/gpio/export", O_WRONLY);
-    if(_fd >= 0){
-    	write(_fd, "17", 2); // intr
-    	close(_fd);
-    }
-    _fd = open("/sys/class/gpio/gpio17/edge", O_WRONLY);
-	if(_fd >= 0){
-		write(_fd, "both", 4);
-		close(_fd);
+	/*
+	 * rf-reset 	- 17
+	 * rf-intr  	- 13
+	 *
+	 * eeprom-cs	- 22
+	 * eeprom-sck	- 23
+	 * eeprom-mosi	- 24
+	 * eeprom-miso	- 25
+	 */
+	struct gpio_info{
+			int num;
+			int dir;
+			int edge;
+	};
+	struct gpio_info gpios[] = {
+			{
+					.num = 17,
+					.dir = 0,
+			},// reset
+			{
+					.num = 27,
+					.dir = 1,
+					.edge = 1,
+			},// intr
+			{
+					.num = 22,
+					.dir = 0,
+			},// cs
+			{
+					.num = 23,
+					.dir = 0,
+			},// sck
+			{
+					.num = 24,
+					.dir = 0,
+			},// mosi
+			{
+					.num = 25,
+					.dir = 1,
+					.edge = 0,
+			},// miso
+	};
+
+	int fd;
+	char buffer[64];
+	for(i = 0; i < sizeof(gpios) / sizeof(struct gpio_info); i++){
+		fd = open("/sys/class/gpio/export", O_WRONLY);
+		if(fd >= 0){
+			snprintf(buffer, 63, "%d", gpios[i].num);
+			write(fd, buffer, strlen(buffer));
+			close(fd);
+			snprintf(buffer, 63, "/sys/class/gpio/gpio%d/direction", gpios[i].num);
+			fd = open(buffer, O_WRONLY);
+			if(fd >= 0){
+				if(gpios[i].dir == 0)
+					snprintf(buffer, 63, "out");
+				else
+					snprintf(buffer, 63, "in");
+				write(fd, buffer, strlen(buffer));
+				close(fd);
+			}
+			if(gpios[i].dir == 1){
+				snprintf(buffer, 63, "/sys/class/gpio/gpio%d/edge", gpios[i].num);
+				fd = open(buffer, O_WRONLY);
+				if(fd >= 0){
+					if(gpios[i].edge == 1) snprintf(buffer, 63, "falling");
+					else if(gpios[i].edge == 2) snprintf(buffer, 63, "rising");
+					else snprintf(buffer, 63, "none");
+					write(fd, buffer, strlen(buffer));
+					close(fd);
+				}
+			}
+		}
 	}
-    _fd = open("/sys/class/gpio/export", O_WRONLY);
-	if(_fd >= 0){
-		write(_fd, "22", 2); // reset
-		close(_fd);
-	}
-	_fd = open("/sys/class/gpio/gpio22/direction", O_WRONLY);
-	if(_fd >= 0){
-		write(_fd, "out", 3);
-		close(_fd);
-	}
-	 _fd = open("/sys/class/gpio/export", O_WRONLY);
-	if(_fd >= 0){
-		write(_fd, "7", 2); // cs
-		close(_fd);
-	}
-	_fd = open("/sys/class/gpio/gpio7/direction", O_WRONLY);
-	if(_fd >= 0){
-		write(_fd, "out", 3);
-		close(_fd);
-	}
-    g_rf_mac_open.fd_cs = open("/sys/class/gpio/gpio7/value", O_WRONLY);
-    if(g_rf_mac_open.fd_cs < 0) LREP("open spi cs device failed\r\n");
-    g_rf_mac_open.fd_reset = open("/sys/class/gpio/gpio22/value", O_WRONLY);
+    g_rf_mac_open.fd_cs = -1;
+    g_rf_mac_open.fd_reset = open("/sys/class/gpio/gpio17/value", O_WRONLY);
     if(g_rf_mac_open.fd_reset < 0) LREP("open rf-reset device failed\r\n");
-    g_rf_mac_open.fd_intr = open("/sys/class/gpio/gpio17/value", O_RDONLY);
+    g_rf_mac_open.fd_intr = open("/sys/class/gpio/gpio27/value", O_RDONLY);
     if(g_rf_mac_open.fd_intr < 0) LREP("open rf-intr device failed\r\n");
+    g_rf_mac_open.fd_spi = open("/dev/spidev0.0", O_RDWR);
+    g_setting_dev.dev.fd_cs   = open("/sys/class/gpio/gpio22/value", O_WRONLY);
+    g_setting_dev.dev.fd_sck  = open("/sys/class/gpio/gpio23/value", O_WRONLY);
+    g_setting_dev.dev.fd_mosi = open("/sys/class/gpio/gpio24/value", O_WRONLY);
+    g_setting_dev.dev.fd_miso =  open("/sys/class/gpio/gpio25/value", O_RDONLY);
 #endif
-    g_rf_mac_open.fd_spi = open(DEV_RF_NAME, O_RDWR);
     if(g_rf_mac_open.fd_spi < 0){
-        LREP("open spi device '%s' failed %d\r\n", DEV_RF_NAME, g_rf_mac_open.fd_spi);
+        LREP("open spi device '%s' failed %d\r\n", "/dev/spidev0.0", g_rf_mac_open.fd_spi);
     }
     else{
         uival = SPI_MODE_0;
         if(ioctl(g_rf_mac_open.fd_spi, SPI_IOC_WR_MODE, (unsigned int)&uival) != 0) LREP("ioctl spi mode failed\r\n");
         uival = 15000000;
         if(ioctl(g_rf_mac_open.fd_spi, SPI_IOC_WR_MAX_SPEED_HZ, (unsigned int)&uival) != 0) LREP("ioctl spi speed failed\r\n");
+        uival = 8;
+        if(ioctl(g_rf_mac_open.fd_spi, SPI_IOC_WR_BITS_PER_WORD, (unsigned int)&uival) != 0) LREP("ioctl bit per word failed\r\n");
     }
 
     g_nwk.mac = &g_rf_mac;
@@ -297,64 +352,86 @@ int main(void)
             u8aVal[0] = 0; u8aVal[1] = 0;
             MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_set_short_address, (unsigned int)&u8aVal[0]);
         }
-    }else if(g_setting.network_type == setting_network_type_router){
-    	struct network_beacon_info nwk_info[1];
+    }else
+    	//if(g_setting.network_type == setting_network_type_router)
+    	{
+    	struct network_beacon_info nwk_info[3];
 		struct network_join_info join_info;
 		struct network_echo_info info;
+
+		if(g_setting.network_type != setting_network_type_router){
+		    for(i = 0; i < 8 ; i++)
+		        u8aVal[i] = i;
+		    MAC_mrf24j40_ioctl(&g_rf_mac, mac_mrf24j40_ioc_set_long_address, (unsigned int)u8aVal);
+		}
 
     	int found = 0;
     	LREP("Device as a Router device\r\n");
     	LREP("Join to new network\r\n");
     	while(!found){
 			// Request a network
-			for(i = NWK_CHANNEL_MIN; i < NWK_CHANNEL_MAX; i++){
+    		i = NWK_CHANNEL_MIN;
+			while(!found && (i < NWK_CHANNEL_MAX)){
 				if(NWK_CHANNEL_MAP & ((unsigned int)1) << i){
 					LREP("Detect network on channel %d ...", i);
-					MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_reset, 0);
-					ival = Network_detect_current_network(&g_nwk, i, nwk_info, 1);
+					ival = Network_detect_current_network(&g_nwk, i, nwk_info, sizeof(nwk_info) / sizeof(struct network_beacon_info));
 					if(ival > 0){
-						LREP("found network panId %04X node %04X [rssi:%02X, lqi:%02X]\r\n",
-								nwk_info[0].panId, nwk_info[0].address,
-								nwk_info[0].rssi, nwk_info[0].lqi);
-						// try to join
-						if(Network_join_request(&g_nwk, i, nwk_info[0].panId, nwk_info[0].address, &join_info) == 0){
-							LREP("Join to network with address %04X\r\n", join_info.address);
-							u8aVal[0] = join_info.address & 0x00FF;
-							u8aVal[1] = (join_info.address >> 8) & 0x00FF;
-							MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_set_short_address, (unsigned int)&u8aVal[0]);
-							u8aVal[0] = nwk_info[0].panId & 0x00FF;
-							u8aVal[1] = (nwk_info[0].panId >> 8) & 0x00FF;
-							MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_set_pan_id, (unsigned int)&u8aVal[0]);
-							// ping test
-							LREP("Ping test connection ...");
-							Network_echo_request(&g_nwk, nwk_info[0].address, 10, 95, &info, 0);
-							if(info.passed < 8) LREP("FAIL\r\n");
-							else {
-								LREP("done\r\n");
-								g_nwk.parent_id = nwk_info[0].address;
-								Network_join_send_done(&g_nwk);
-								found = 1;
-								break;
+						int nwk_index;
+						LREP(" %d networks\r\n", ival);
+						for(nwk_index = 0 ;nwk_index < ival; nwk_index++){
+							LREP("found network[%02d] panId %04X node %04X [rssi:%02X, lqi:%02X]\r\n",
+									nwk_index,
+									nwk_info[nwk_index].panId, nwk_info[nwk_index].address,
+									nwk_info[nwk_index].rssi, nwk_info[nwk_index].lqi);
+						}
+						for(nwk_index = 0 ;nwk_index < ival; nwk_index++){
+							// try to join
+							usleep(1000* 100);
+							LREP("Try join to network panId %04X parent %02X ...",
+									nwk_info[nwk_index].panId, nwk_info[nwk_index].address);
+							if(Network_join_request(&g_nwk, i, nwk_info[nwk_index].panId, nwk_info[nwk_index].address, &join_info) == 0){
+								LREP("done with address %04X\r\n", join_info.address);
+								u8aVal[0] = join_info.address & 0x00FF;
+								u8aVal[1] = (join_info.address >> 8) & 0x00FF;
+								MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_set_short_address, (unsigned int)&u8aVal[0]);
+								u8aVal[0] = nwk_info[nwk_index].panId & 0x00FF;
+								u8aVal[1] = (nwk_info[nwk_index].panId >> 8) & 0x00FF;
+								MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_set_pan_id, (unsigned int)&u8aVal[0]);
+								// ping test
+								LREP("Ping test connection ...");
+								Network_echo_request(&g_nwk, nwk_info[nwk_index].address, 10, 95, &info, 0);
+								if(info.passed < 8) LREP("FAIL\r\n");
+								else {
+									LREP("done\r\n");
+									g_nwk.parent_id = nwk_info[nwk_index].address;
+									Network_join_send_done(&g_nwk);
+									found = 1;
+									break;
+								}
+							}else{
+								LREP(" FAIL\r\n");
 							}
-						}else{
-							LREP("Join failed\r\n");
 						}
 					}
 					else {
 						LREP("not found\r\n");
 					}
 				}
+				i++;
 			}// end for
     	}// end while
-    }else{
-    	LREP("Type invalid\r\n");
-    	while(1){sleep(1);}
     }
+//    else{
+//    	LREP("Type invalid\r\n");
+//    	while(1){sleep(1);}
+//    }
 
-    while(1){
+    while(!is_app_term()){
     	Network_loop(&g_nwk, 1000);
         LED_TOGGLE(BLUE);
     }
+	ioctl(g_fd_debug_rx, TCSETS2, &g_stdin_opt);
+    sleep(2);
     return 0;
 }
 #if defined(OS_FREERTOS)
@@ -370,59 +447,49 @@ void *Thread_DebugTX(void* param){
 }
 #endif
 void *Thread_UserInput(void *param){
-    int len, fd;
-    fd_set readfs;
-    struct timeval timeout;
+    int len;
     unsigned char buff[32];
-    
-    FD_ZERO(&readfs);
-    FD_SET(g_fd_debug_rx, &readfs);
-    timeout.tv_sec      = 1;
-    timeout.tv_usec     = 0;
-
-    fd = g_fd_debug_rx;
     CLI_start();
-    while (1) {
-        len = select(fd+1, &readfs, 0, 0, &timeout);
-        if(len > 0){
-            if(FD_ISSET(g_fd_debug_rx, &readfs)){
-				len = read(g_fd_debug_rx, buff, 32);
-				if(len > 0){
-					g_kb_value = buff[0];
-					CLI_process(buff, len);
-				}
+	int timeout = 1000;
+	struct pollfd poll_fd[1];
+	while(!is_app_term()){
+		poll_fd[0].fd = g_fd_debug_rx;
+		poll_fd[0].events = POLLIN;
+		poll_fd[0].revents = 0;
+		int ret = poll(&poll_fd[0], 1, timeout);
+		if (ret > 0 && ((poll_fd[0].revents & POLLIN) != 0))  {
+			len = read(g_fd_debug_rx, buff, 32);
+			if(len > 0){
+				g_kb_value = buff[0];
+				CLI_process(buff, len);
 			}
-        }else if(len == 0){
-        	LED_TOGGLE(GREEN);
-        }else{
-            LREP("select intr pin failed.\r\n");
-            break;
-        }
-    }
+		}
+	}
     while(1){sleep(1);}
 }
 void* Thread_PhyIntr(void* param){
-	int len, fd;
-	fd_set readfs;
-	struct timeval timeout;
-
-	FD_ZERO(&readfs);
-	FD_SET(g_rf_mac_open.fd_intr, &readfs);
-    fd = g_rf_mac_open.fd_intr;
-    timeout.tv_sec      = 1;
-    timeout.tv_usec     = 0;
-    while(1){
-        len = select(fd+1, &readfs, 0, 0, &timeout);
-        if(len > 0){
-            if(FD_ISSET(g_rf_mac_open.fd_intr, &readfs)){
-                MAC_mrf24j40_ioctl(&g_rf_mac, mac_mrf24j40_ioc_trigger_interrupt, 0);
-            }
-        }
+#if defined(OS_LINUX)
+	unsigned char rx[5];
+#endif
+    int timeout = 1000;
+    struct pollfd poll_fd[1];
+    while(!is_app_term()){
+		poll_fd[0].fd = g_rf_mac_open.fd_intr;
+		poll_fd[0].events = POLLPRI;
+		poll_fd[0].revents = 0;
+		lseek(g_rf_mac_open.fd_intr, 0, SEEK_SET);
+		int ret = poll(&poll_fd[0], 1, timeout);
+		if (ret > 0 && ((poll_fd[0].revents & POLLPRI) != 0))  {
+#if defined(OS_LINUX)
+			ret = read(g_rf_mac_open.fd_intr, &rx, 5);
+#endif
+			MAC_mrf24j40_ioctl(&g_rf_mac, mac_mrf24j40_ioc_trigger_interrupt, 0);
+		}
     }
     return 0;
 }
 void *Thread_MiwiTask(void*param){
-    while(1){
+    while(!is_app_term()){
         if(MAC_mrf24j40_select(&g_rf_mac, 1000)){
             MAC_mrf24j40_task(&g_rf_mac);
         }

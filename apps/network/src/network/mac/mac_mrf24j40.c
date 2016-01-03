@@ -28,82 +28,106 @@
 #define PHY_SPEED   1000000
 #define PHY_SET_CS(phy, val) { \
 		uint8_t __u8val = (val == 0) ? '0' : '1';\
-		if(phy->fd_cs >= 0) write(phy->fd_cs, &__u8val, 1);\
+		if(phy->fd_cs >= 0){\
+			lseek(phy->fd_cs, 0, SEEK_SET);\
+			write(phy->fd_cs, &__u8val, 1);\
+		}\
 }
 #endif
+#define MAC_LREP_WARN(x, args...)	LREP("mac: " x, ##args)
 uint8_t PHY_mrf24j40_getLongRAMAddr	(struct phy_mrf24j40* phy,uint16_t address){
 	uint8_t u8tx[3], u8rx[3];
-	struct spi_ioc_transfer xfer;
+	int ret;
+	struct spi_ioc_transfer xfer = {
+			.tx_buf			= (unsigned long)u8tx,
+			.rx_buf 		= (unsigned long)u8rx,
+			.bits_per_word 	= 8,
+			.speed_hz 		= PHY_SPEED,
+			.len			= 3,
+			.delay_usecs    = 0,
+	};
 
 	PHY_SET_CS(phy, 0);
-	xfer.tx_buf			= (unsigned int)u8tx;
-	xfer.rx_buf 		= (unsigned int)u8rx;
-	xfer.bits_per_word 	= 8;
-	xfer.speed_hz 		= PHY_SPEED;
-	xfer.len			= 3;
 	u8tx[0] = ((address >> 3)&0x7F) | 0x80;
 	u8tx[1] = ((address << 5)&0xE0);
 	u8tx[2] = 0;
 	u8rx[2] = 0;
-	ioctl(phy->fd_spi, SPI_IOC_MESSAGE(1), (unsigned int)&xfer);
+	ret = ioctl(phy->fd_spi, SPI_IOC_MESSAGE(1), (unsigned int)&xfer);
 	PHY_SET_CS(phy, 1);
+	if(ret < 0) MAC_LREP_WARN("ioctl spi fail %d\r\n", ret);
+
 	return u8rx[2];
 }
 uint8_t PHY_mrf24j40_getShortRAMAddr(struct phy_mrf24j40* phy,uint8_t address){
 	uint8_t u8tx[2], u8rx[2];
-	struct spi_ioc_transfer xfer;
+	int ret;
+	struct spi_ioc_transfer xfer = {
+			.tx_buf			= (unsigned long)u8tx,
+			.rx_buf 		= (unsigned long)u8rx,
+			.bits_per_word 	= 8,
+			.speed_hz 		= PHY_SPEED,
+			.len			= 2,
+			.delay_usecs    = 0,
+	};
 
 	PHY_SET_CS(phy, 0);
-	xfer.tx_buf			= (unsigned int)u8tx;
-	xfer.rx_buf 		= (unsigned int)u8rx;
-	xfer.bits_per_word 	= 8;
-	xfer.speed_hz 		= PHY_SPEED;
-	xfer.len			= 2;
 	u8tx[0] 			= address;
 	u8tx[1]				= 0;
 	u8rx[1] 			= 0;
-	ioctl(phy->fd_spi, SPI_IOC_MESSAGE(1), (unsigned int)&xfer);
+	ret = ioctl(phy->fd_spi, SPI_IOC_MESSAGE(1), (unsigned int)&xfer);
 	PHY_SET_CS(phy, 1);
+	if(ret < 0) MAC_LREP_WARN("ioctl spi fail %d\r\n", ret);
+
 	return u8rx[1];
 }
 void 	PHY_mrf24j40_setLongRAMAddr	(struct phy_mrf24j40* phy,uint16_t address, uint8_t value){
 	uint8_t u8tx[3];
-	struct spi_ioc_transfer xfer;
+	int ret;
+	struct spi_ioc_transfer xfer = {
+			.tx_buf			= (unsigned long)u8tx,
+			.rx_buf 		= 0,
+			.bits_per_word 	= 8,
+			.speed_hz 		= PHY_SPEED,
+			.len			= 3,
+			.delay_usecs    = 0,
+	};
 
 	PHY_SET_CS(phy, 0);
-	xfer.tx_buf			= (unsigned int)u8tx;
-	xfer.rx_buf 		= 0;
-	xfer.bits_per_word 	= 8;
-	xfer.speed_hz 		= PHY_SPEED;
-	xfer.len			= 3;
 	u8tx[0] = (((address >> 3))&0x7F) | 0x80;
 	u8tx[1] = (((address << 5))&0xE0) | 0x10;
 	u8tx[2] = value;
-	ioctl(phy->fd_spi, SPI_IOC_MESSAGE(1), (unsigned int)&xfer);
+	ret = ioctl(phy->fd_spi, SPI_IOC_MESSAGE(1), (unsigned int)&xfer);
 	PHY_SET_CS(phy, 1);
+	if(ret < 0) MAC_LREP_WARN("ioctl spi fail %d\r\n", ret);
+
 #if (PHY_SET_REG_VERIFY > 0)
 	u8tx[0] = PHY_mrf24j40_getLongRAMAddr(phy, address);
 	if(u8tx[0] != value){
 		LREP_WARN("PHY set reg %04X=%02X failed, read back %02X\r\n",
 				address, value, u8tx[0]);
-	}else LREP("PHY set reg %04X=%02X done\r\n",
-			address, value);
+	}
+	//else LREP("PHY set reg %04X=%02X done\r\n",
+	//		address, value);
 #endif
 }
 void 	PHY_mrf24j40_setShortRAMAddr(struct phy_mrf24j40* phy,uint8_t address, uint8_t value){
 	uint8_t u8tx[2];
-	struct spi_ioc_transfer xfer;
+	int ret;
+	struct spi_ioc_transfer xfer = {
+			.tx_buf			= (unsigned long)u8tx,
+			.rx_buf 		= 0,
+			.bits_per_word 	= 8,
+			.speed_hz 		= PHY_SPEED,
+			.len			= 2,
+			.delay_usecs    = 0,
+	};
 
 	PHY_SET_CS(phy, 0);
-	xfer.tx_buf			= (unsigned int)u8tx;
-	xfer.rx_buf 		= 0;
-	xfer.bits_per_word 	= 8;
-	xfer.speed_hz 		= PHY_SPEED;
-	xfer.len			= 2;
 	u8tx[0] = address;
 	u8tx[1] = value;
-	ioctl(phy->fd_spi, SPI_IOC_MESSAGE(1), (unsigned int)&xfer);
+	ret = ioctl(phy->fd_spi, SPI_IOC_MESSAGE(1), (unsigned int)&xfer);
 	PHY_SET_CS(phy, 1);
+	if(ret < 0) MAC_LREP_WARN("ioctl spi fail %d\r\n", ret);
 	// verify
 #if (PHY_SET_REG_VERIFY > 0)
 	if(address != PHY_MRF24J40_WRITE_SOFTRST){
@@ -116,8 +140,9 @@ void 	PHY_mrf24j40_setShortRAMAddr(struct phy_mrf24j40* phy,uint8_t address, uin
 		if(u8tx[0] != value){
 			LREP_WARN("PHY set reg %02X=%02X failed, read back %02X\r\n",
 					address, value, u8tx[0]);
-		}else LREP("PHY set reg %02X=%02X done\r\n",
-				address, value);
+		}
+		//else LREP("PHY set reg %02X=%02X done\r\n",
+		//		address, value);
 	}
 #endif
 }
@@ -128,6 +153,7 @@ void PHY_mrf24j40_hardreset(struct phy_mrf24j40* phy){
 #elif defined(OS_LINUX)
 	u8val = '0';
 #endif
+	lseek(phy->fd_reset, 0, SEEK_SET);
 	write(phy->fd_reset, &u8val, 1);
 	usleep(1000 * 100);
 #if defined(OS_FREERTOS)
@@ -135,6 +161,7 @@ void PHY_mrf24j40_hardreset(struct phy_mrf24j40* phy){
 #elif defined(OS_LINUX)
 	u8val = '1';
 #endif
+	lseek(phy->fd_reset, 0, SEEK_SET);
 	write(phy->fd_reset, &u8val, 1);
 	usleep(1000 * 100);
 }
@@ -340,6 +367,7 @@ int 	MAC_mrf24j40_open(struct mac_mrf24j40* mac, struct mac_mrf24j40_open_param 
 	sem_wait(&mac->sem_access);
 	sem_post(&mac->sem_access);
 	PHY_mrf24j40_initialize(&mac->phy);
+	mac->mode = mac_mode_idle;
 	ret = 0;
 
 	return ret;
@@ -621,6 +649,7 @@ int 	__mac_mrf24j40_write(struct mac_mrf24j40* mac, struct mac_mrf24j40_write_pa
 	if(frmCtrl.bits.ackReq == 1) i = 0x05;
 	else i = 0x01;
 	PHY_mrf24j40_setShortRAMAddr(&mac->phy, PHY_MRF24J40_WRITE_TXNMTRIG, i);
+//	LREP("write to tx fifo done len %d\r\n", payloadlen);
 	ret = 0;
 	return ret;
 }
@@ -711,12 +740,15 @@ int 	MAC_mrf24j40_task(struct mac_mrf24j40* mac){
 
 	// interrupt
 	flags.Val = PHY_mrf24j40_getShortRAMAddr(&mac->phy, PHY_MRF24J40_READ_ISRSTS);
+//	LREP("flag=%02X\r\n", flags.Val);
 	if(flags.bits.RF_TXIF){
 		mac->flags |= ((uint8_t)1 << MAC_MRF24J40_FLAG_TX_DONE);	// set bit tx done
 		PHY_mrf24j40_getShortRAMAddr(&mac->phy, PHY_MRF24J40_READ_TXSR);
+		mac->mode = mac_mode_idle;
 		flag_event_post(&mac->tx_event);
 	}
 	if(flags.bits.RF_RXIF){
+		mac->mode = mac_mode_rx;
 		/* |frame_len(n+m+2)|header(m)|data(n)|FCS(2)|LQI(1)|RSSI(1)|
 		 * */
 		PHY_mrf24j40_setShortRAMAddr(&mac->phy, PHY_MRF24J40_WRITE_BBREG1, 0x40);	// Disable RX
@@ -747,18 +779,20 @@ int 	MAC_mrf24j40_task(struct mac_mrf24j40* mac){
 			LREP_WARN("no more rx space\r\n");
 		}
 		__mac_mrf24j40_unlock(mac);
+		mac->mode = mac_mode_idle;
 	}
 	if(flags.bits.SECIF){
 		PHY_mrf24j40_setShortRAMAddr(&mac->phy, PHY_MRF24J40_WRITE_SECCR0, 0x80);
 		//LREP("\r\nSECIF\r\n");
 	}
 	// tx pennding items
-	if(mac->flags & ((uint8_t)1 << MAC_MRF24J40_FLAG_TX_DONE)){	// if tx done
+	if((mac->flags & ((uint8_t)1 << MAC_MRF24J40_FLAG_TX_DONE)) || mac->mode == mac_mode_idle){	// if tx done
 		__mac_mrf24j40_lock(mac);
 		// find full item
 		for(i = 0 ;i < MAC_MRF24J40_WRITE_MAX_ITEMS; i++){
 			if(mac->write_items[i].flags & 0x01){
 				item = &mac->write_items[i];
+				mac->mode = mac_mode_tx;
 				__mac_mrf24j40_write(mac, &item->param, item->payload, item->payload_len);
 				item->flags &= ~((uint8_t)0x01);	// clear full bit
 				mac->flags &= ~((uint8_t)1 << MAC_MRF24J40_FLAG_TX_DONE);	// clear tx done

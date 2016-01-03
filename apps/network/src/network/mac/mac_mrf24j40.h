@@ -68,6 +68,11 @@ struct mac_mrf24j40_read_item{
 };
 #define MAC_MRF24J40_FLAG_TX_DONE   0
 #define MAC_MRF24J40_FLAG_RX_DONE   1
+enum mac_mode{
+	mac_mode_idle = 0,
+	mac_mode_rx,
+	mac_mode_tx,
+};
 struct mac_mrf24j40{
     uint64_t        networkAddress;
     struct phy_mrf24j40 phy;
@@ -79,6 +84,8 @@ struct mac_mrf24j40{
     uint8_t         flags;
     struct mac_mrf24j40_write_item  write_items[MAC_MRF24J40_WRITE_MAX_ITEMS];
     struct mac_mrf24j40_read_item   read_items[MAC_MRF24J40_READ_MAX_ITEMS];
+
+    enum mac_mode  mode;
 };
 enum MAC_MRF24J40_PACKET_TYPE{
     MAC_MRF24J40_PACKET_TYPE_DATA = 0,

@@ -1,5 +1,5 @@
 TARGET=stm32f4-freertos
-#TARGET=arm-linux
+TARGET=arm-linux
 
 
 BINDIR=bin
@@ -57,6 +57,7 @@ ifneq (,$(findstring linux,$(TARGET)))
 	OUTFILE=app_net
 	DEFS+=-DOS_LINUX
 	LDFLAGS+=-lrt -lpthread -ldl -T linux.ld
+	CFLAGS+=-march=armv7-a -mtune=arm1176jzf-s
 	
 	CSOURCES+=$(shell find -L $(EXTRALIB_DIR)/special/linux -name '*.c')
 	INC+=$(shell find -L $(EXTRALIB_DIR)/special/include -name '*.h' -exec dirname {} \; | uniq)
