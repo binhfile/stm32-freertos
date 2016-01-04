@@ -1,0 +1,14 @@
+export CCPREFIX=/home/tools/arm-bcm2708/gcc-linaro-arm-linux-gnueabihf-raspbian/bin/arm-linux-gnueabihf-
+make ARCH=arm CROSS_COMPILE=${CCPREFIX} -j4
+make ARCH=arm CROSS_COMPILE=${CCPREFIX} INSTALL_MOD_PATH=../modules modules_install
+
+cd tools/mkimage
+./imagetool-uncompressed.py ../linux/arch/arm/boot/zImage
+scp kernel.img pi@raspberrypi:/tmp
+cd tools/modules 
+tar czf modules.tgz * 
+scp modules.tgz pi@raspberrypi:/tmp
+cd / 
+sudo mv /tmp/kernel.img /boot/ 
+sudo tar xzf /tmp/modules.tgz 
+rm /tmp/modules.tgz

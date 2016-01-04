@@ -53,7 +53,7 @@ int main(int argc, char** argv){
 	snprintf(buffer, 31, "/dev/gpio_drv_%d", pin);
 	int fd = open(buffer, O_RDWR);
 	if(fd < 0){
-		printf("open /dev/gpio_drv_%d fail %d\r\n", fd);
+		printf("open /dev/gpio_drv_%d fail %d\r\n", pin, fd);
 		close(fd_gpio);
 		return -1;
 	}
