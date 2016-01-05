@@ -31,7 +31,7 @@
 
 #include "gpio.h"
 /************************** Constant Definitions *****************************/
-#define GPIO_BASE_REG	(0x7E200000)
+#define GPIO_BASE_REG	(0x3F200000)
 #define GPIO_MEM_LEN	(0xB0)
 #define GPIO_DRV_NAME	"gpio_drv"
 // GPIO setup macros. Always use INP_GPIO(x) before using OUT_GPIO(x) or SET_GPIO_ALT(x,y)
@@ -70,10 +70,6 @@ struct GPIO_CONTEXT
 	struct resource 	*res;	
 	unsigned int		*mem;
 	int major;
-	// dev/gpio_drv_x
-	dev_t 				x_dev;
-	struct cdev 		*x_c_dev;
-	int					x_major;
 	
 	struct GPIO_PIN_CONTEXT	*pin;	
 };
@@ -81,7 +77,6 @@ struct GPIO_CONTEXT
 /************************** Variable Definitions *****************************/
 struct GPIO_CONTEXT	g_gpio_ctx;
 static struct class *g_gpio_class;
-static struct class *g_gpio_class_x;
 /***************** Macros (Inline Functions) Definitions *********************/
 /*****************************************************************************/
 irqreturn_t gpio_x_isr (int iIrq, void * dev_id)
@@ -158,6 +153,7 @@ EXPORT_SYMBOL(gpio_pin_write);
 
 static int gpio_x_open(struct inode *inode, struct file *filp)
 {
+	LREP("open pin\r\n");
 	return 0;
 }
 static int gpio_x_release(struct inode *inode, struct file *filp)
@@ -185,10 +181,10 @@ static ssize_t gpio_x_write(struct file *filp, const char __user *buff, size_t c
 	int minor = iminor(file_inode(filp));
 	
 	if(count > 0){
-		if(copy_from_user((void*)&ucval, (const void __user *)buff, 1) != 0){
+		copy_from_user((void*)&ucval, (const void __user *)buff, 1);
 			gpio_pin_write(minor, ucval);
 			return count;
-		}
+		
 	}
 	
     return -EINVAL;
@@ -198,6 +194,52 @@ static long gpio_x_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	int ret = -EINVAL;
 	unsigned int *pui = (unsigned int*)arg;
 	switch(cmd){
+		case GPIO_IOC_EXPORT_PIN:{
+			unsigned int pin = *((unsigned int*)arg);	
+			struct GPIO_PIN_CONTEXT* ptr=0;
+			struct GPIO_PIN_CONTEXT* pin_ctx ;
+			int exist;
+			// check overflow
+			if(pin >= 64){
+				ret = -1;
+				return ret;
+			}
+			// search exist
+			exist = 0;
+			if(g_gpio_ctx.pin){
+				ptr = g_gpio_ctx.pin;
+				while(ptr->next != 0){
+					if(ptr->pin == pin){
+						exist = 1;
+						break;
+					 }
+					 ptr = ptr->next;
+				}
+			}
+			if(exist){
+				LREP(GPIO_DRV_NAME "_%d is exist\r\n", pin);
+				break;
+			}
+			device_create(g_gpio_class, NULL, MKDEV(g_gpio_ctx.major, pin), NULL, GPIO_DRV_NAME "_%d", pin);
+			GPIO_SET_INTR_NONE(pin);
+			INP_GPIO(pin);
+			pin_ctx = (struct GPIO_PIN_CONTEXT*)kmalloc(sizeof(struct GPIO_PIN_CONTEXT), GFP_ATOMIC);
+			pin_ctx->next = 0;
+			pin_ctx->pin = pin;
+			pin_ctx->irq = -1;
+			pin_ctx->state = 0;
+			snprintf(pin_ctx->name, 31, GPIO_DRV_NAME "_%d", pin);
+			if(g_gpio_ctx.pin){
+				ptr = g_gpio_ctx.pin;
+				while(ptr->next != 0) ptr = ptr->next;
+				ptr->next = pin_ctx;
+			}else{
+				g_gpio_ctx.pin = pin_ctx;
+			}
+			LREP("export pin %d, set as input\r\n", pin);
+			ret = 0;
+			break;
+		}
 		case GPIO_IOC_WR_DIR:{
 			ret = gpio_pin_set_dir(minor, *pui);
 			break;
@@ -227,83 +269,15 @@ static unsigned int gpio_x_poll(struct file *filp, struct poll_table_struct * wa
 	}	
 	return ret;
 }
-static long GPIOIoctl(struct file *filp, unsigned int cmd, unsigned long arg)
-{
-	int ret = 0;
-	int exist;
-	
-	switch(cmd)
-	{
-		case GPIO_IOC_EXPORT_PIN:{
-			unsigned int pin = *((unsigned int*)arg);	
-			struct GPIO_PIN_CONTEXT* ptr=0;
-			struct GPIO_PIN_CONTEXT* pin_ctx ;
-			// check overflow
-			if(pin >= 64){
-				ret = -1;
-				return ret;
-			}
-			// search exist
-			exist = 0;
-			if(g_gpio_ctx.pin){
-				ptr = g_gpio_ctx.pin;
-				while(ptr->next != 0){
-					if(ptr->pin == pin){
-						exist = 1;
-						break;
-					 }
-					 ptr = ptr->next;
-				}
-			}
-			if(exist){
-				LREP(GPIO_DRV_NAME "_%d is exist\r\n", pin);
-				break;
-			}
-			device_create(g_gpio_class_x, NULL, MKDEV(g_gpio_ctx.x_major, pin), NULL, GPIO_DRV_NAME "_%d", pin);
-			GPIO_SET_INTR_NONE(pin);
-			INP_GPIO(pin);
-			pin_ctx = (struct GPIO_PIN_CONTEXT*)kmalloc(sizeof(struct GPIO_PIN_CONTEXT), GFP_ATOMIC);
-			pin_ctx->next = 0;
-			pin_ctx->pin = pin;
-			pin_ctx->irq = -1;
-			pin_ctx->state = 0;
-			snprintf(pin_ctx->name, 31, GPIO_DRV_NAME "_%d", pin);
-			if(g_gpio_ctx.pin){
-				ptr = g_gpio_ctx.pin;
-				while(ptr->next != 0) ptr = ptr->next;
-				ptr->next = pin_ctx;
-			}else{
-				g_gpio_ctx.pin = pin_ctx;
-			}
-			LREP("export pin %d, set as input\r\n", pin);
-			break;
-		}
-		default:
-			LREP_WARN("unknown IOCTL cmd %d", cmd);
-			ret = -EINVAL;
-			break;
-	}
-	return ret;
-}
-
 /*File operations of device*/
 static struct file_operations gpio_fops = {
-	.owner 			= THIS_MODULE,
-	.read 			= 0,
-	.write 			= 0,
-	.unlocked_ioctl = GPIOIoctl,
-	.open 			= 0,
-	.release 		= 0,
-	.poll 			= 0,
-};
-static struct file_operations gpio_x_fops = {
 	.owner 			= THIS_MODULE,
 	.read 			= gpio_x_read,
 	.write 			= gpio_x_write,
 	.unlocked_ioctl = gpio_x_ioctl,
 	.open 			= gpio_x_open,
 	.release 		= gpio_x_release,
-	.poll 			= gpio_x_poll,
+	.poll 			= gpio_x_poll
 };
 static int GPIOInit(void)
 {
@@ -325,11 +299,11 @@ static int GPIOInit(void)
 	// register file operations
 	g_gpio_ctx.c_dev = cdev_alloc();
 	cdev_init(g_gpio_ctx.c_dev, &gpio_fops);
-	result = cdev_add(g_gpio_ctx.c_dev, g_gpio_ctx.dev, 1);
+	result = cdev_add(g_gpio_ctx.c_dev, g_gpio_ctx.dev, 255);
 	if(result < 0){
 		LREP_WARN("cdev_add fail %d\r\n", result);
 		unregister_chrdev(g_gpio_ctx.major, GPIO_DRV_NAME);
-		unregister_chrdev_region(g_gpio_ctx.dev, 1);	
+		unregister_chrdev_region(g_gpio_ctx.dev, 255);	
 		return -1;
 	}
 	// mapping device physical memory to virtual memory	of driver
@@ -338,7 +312,7 @@ static int GPIOInit(void)
 		LREP_WARN("request_mem_region fail\r\n");
 		cdev_del(g_gpio_ctx.c_dev);
 		unregister_chrdev(g_gpio_ctx.major, GPIO_DRV_NAME);
-		unregister_chrdev_region(g_gpio_ctx.dev, 1);	
+		unregister_chrdev_region(g_gpio_ctx.dev, 255);	
 		return -1;
 	}
 	g_gpio_ctx.mem = ioremap(GPIO_BASE_REG, GPIO_MEM_LEN);
@@ -347,33 +321,9 @@ static int GPIOInit(void)
 		release_mem_region(GPIO_BASE_REG, GPIO_MEM_LEN);
 		cdev_del(g_gpio_ctx.c_dev);
 		unregister_chrdev(g_gpio_ctx.major, GPIO_DRV_NAME);
-		unregister_chrdev_region(g_gpio_ctx.dev, 1);
+		unregister_chrdev_region(g_gpio_ctx.dev, 255);
 		return -1;
-	}
-	// register /dev/gpio_drv_x
-	g_gpio_ctx.x_c_dev = 0;
-    
-	result = alloc_chrdev_region(&g_gpio_ctx.x_dev, 0, 255, GPIO_DRV_NAME "_");
-	if(result < 0){
-		LREP_WARN("alloc_chrdev_region fail %d\r\n", result);
-		return -1;
-	}
-	g_gpio_ctx.x_major = MAJOR(g_gpio_ctx.x_dev);
-	LREP("major x %d\r\n", g_gpio_ctx.major);
-	
-	g_gpio_class_x = class_create(THIS_MODULE, GPIO_DRV_NAME "_");
-	
-	//device_create(g_gpio_class_x, NULL, MKDEV(g_gpio_ctx.x_major, 0), NULL, GPIO_DRV_NAME "_" x);	
-	
-	g_gpio_ctx.x_c_dev = cdev_alloc();
-	cdev_init(g_gpio_ctx.x_c_dev, &gpio_x_fops);
-	result = cdev_add(g_gpio_ctx.x_c_dev, g_gpio_ctx.x_dev, 1);
-	if(result < 0){
-		LREP_WARN("cdev_add fail %d\r\n", result);
-		unregister_chrdev(g_gpio_ctx.x_major, GPIO_DRV_NAME "_");
-		unregister_chrdev_region(g_gpio_ctx.x_dev, 1);	
-		return -1;
-	}
+	}	
 	return result;
 }
 static void GPIOExit(void)
@@ -382,13 +332,8 @@ static void GPIOExit(void)
 	release_mem_region(GPIO_BASE_REG, GPIO_MEM_LEN);
 	cdev_del(g_gpio_ctx.c_dev);
 	unregister_chrdev(g_gpio_ctx.major, GPIO_DRV_NAME);
-	unregister_chrdev_region(g_gpio_ctx.dev, 1);	
+	unregister_chrdev_region(g_gpio_ctx.dev, 255);	
 	class_destroy(g_gpio_class);
-	
-	cdev_del(g_gpio_ctx.x_c_dev);
-	unregister_chrdev(g_gpio_ctx.x_major, GPIO_DRV_NAME "_");
-	unregister_chrdev_region(g_gpio_ctx.x_dev, 1);	
-	class_destroy(g_gpio_class_x);
 	
 	if(g_gpio_ctx.pin){
 		struct GPIO_PIN_CONTEXT* ptr = g_gpio_ctx.pin;

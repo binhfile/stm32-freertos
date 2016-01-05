@@ -53,15 +53,15 @@ int main(int argc, char** argv){
 	snprintf(buffer, 31, "/dev/gpio_drv_%d", pin);
 	int fd = open(buffer, O_RDWR);
 	if(fd < 0){
-		printf("open /dev/gpio_drv_%d fail %d\r\n", pin, fd);
+		printf("open %s fail %d\r\n", buffer, fd);
 		close(fd_gpio);
 		return -1;
 	}
 	uival = dir;
-	ret = ioctl(fd, GPIO_IOC_WR_DIR, &uival);
-	printf("set dir %d fail %d\r\n", pin, ret);
+	ret = ioctl(fd, GPIO_IOC_WR_DIR, &uival);	
 	if(ret < 0){
-		goto EXIT;
+		printf("set dir %d fail %d\r\n", pin, ret);
+		goto EXIT;		
 	}
 	
 	if(dir == GPIO_DIR_OUTPUT){
