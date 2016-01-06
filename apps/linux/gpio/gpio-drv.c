@@ -8,13 +8,9 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/kdev_t.h>
-#include <linux/fs.h>
 #include <linux/cdev.h>
-#include <linux/ioport.h>
 #include <linux/interrupt.h>
 #include <linux/irqreturn.h>
-#include <linux/delay.h>
-#include <linux/wait.h>
 #include <linux/poll.h>
 #include <linux/sched.h>
 #include <linux/gpio.h>
@@ -26,12 +22,9 @@
 #include <linux/kernel.h>
 #include <linux/device.h>
 
-#include <asm/io.h>
-#include <asm/uaccess.h>
-
 #include "gpio.h"
 /************************** Constant Definitions *****************************/
-#define GPIO_BASE_REG	(0x3F200000)
+#define GPIO_BASE_REG	(0x7E200000)
 #define GPIO_MEM_LEN	(0xB0)
 #define GPIO_DRV_NAME	"gpio_drv"
 // GPIO setup macros. Always use INP_GPIO(x) before using OUT_GPIO(x) or SET_GPIO_ALT(x,y)
@@ -170,7 +163,7 @@ static ssize_t gpio_x_read(struct file *filp, char __user *buff, size_t count, l
 	puc = (unsigned char *)buff;
 	if(count < 0) count = 0;
 	while(count --){
-		if(copy_to_user((void __user *)puc, (const void*)&ucval, 1) == 0) break;
+		if(copy_to_user((void __user *)puc, (const void*)&ucval, 1) != 0) break;
 		puc++;
 	}
     return count;
@@ -181,12 +174,10 @@ static ssize_t gpio_x_write(struct file *filp, const char __user *buff, size_t c
 	int minor = iminor(file_inode(filp));
 	
 	if(count > 0){
-		copy_from_user((void*)&ucval, (const void __user *)buff, 1);
-			gpio_pin_write(minor, ucval);
-			return count;
-		
-	}
-	
+		if(copy_from_user((void*)&ucval, (const void __user *)buff, 1)) return 0;
+		gpio_pin_write(minor, ucval);
+		return count;
+	}	
     return -EINVAL;
 }
 static long gpio_x_ioctl(struct file *filp, unsigned int cmd, unsigned long arg){
@@ -212,8 +203,8 @@ static long gpio_x_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 					if(ptr->pin == pin){
 						exist = 1;
 						break;
-					 }
-					 ptr = ptr->next;
+					}
+					ptr = ptr->next;
 				}
 			}
 			if(exist){
