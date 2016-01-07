@@ -3,6 +3,8 @@
 
 #include <signal.h>
 #include <unistd.h>
+#include <sys/select.h>
+#include <time.h>
 
 #include "gpio.h"
 
@@ -71,6 +73,52 @@ int main(int argc, char** argv){
 			printf("write %d ret %d\r\n", ucval, ret);
 			ucval = !ucval;
 			sleep(1);
+		}
+	}
+	else if(dir == GPIO_DIR_INPUT){
+		unsigned char ucval = 0;		
+		uival = intr;
+		ret = ioctl(fd, GPIO_IOC_WR_INTR, &uival);	
+		if(ret < 0){
+			printf("set interrupt %d fail %d\r\n", pin, ret);
+			goto EXIT;		
+		}
+		if(intr == GPIO_INTR_NONE){
+			printf("no select\r\n");
+			while(!g_isTerminate){
+				ucval = 0;
+				ret = read(fd, &ucval, 1);
+				printf("read %d len %d\r\n", ucval, ret);
+				sleep(1);
+				fflush(stdout);
+			}
+		}else{
+			fd_set readfd;
+			struct timeval timeout;
+			printf("use select\r\n");
+			while(!g_isTerminate){
+				timeout.tv_sec = 1;
+				timeout.tv_usec = 0;
+				FD_ZERO(&readfd);
+				FD_SET(fd, &readfd);
+				ret = select(fd+1, &readfd, 0, 0, &timeout);
+				if(ret < 0){
+					printf("select fail %d\r\n", ret);
+					break;
+				}else if(ret > 0){
+					if(FD_ISSET(fd, &readfd)){
+						ucval = 0;
+						ret = read(fd, &ucval, 1);
+						printf("read %d len %d\r\n", ucval, ret);
+						sleep(1);
+					}else{
+						printf("select not fd\r\n");
+					}
+				}else{
+					printf(".");
+				}
+				fflush(stdout);
+			}
 		}
 	}
 	

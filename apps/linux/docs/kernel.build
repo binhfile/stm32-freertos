@@ -1,14 +1,14 @@
 export CCPREFIX=/home/toolchain/tools/arm-bcm2708/gcc-linaro-arm-linux-gnueabihf-raspbian/bin/arm-linux-gnueabihf-
-make ARCH=arm CROSS_COMPILE=${CCPREFIX} -j4
-make ARCH=arm CROSS_COMPILE=${CCPREFIX} INSTALL_MOD_PATH=../modules modules_install
+export CCPREFIX=/home/toolchain/tools/arm-bcm2708/arm-bcm2708-linux-gnueabi/bin/arm-bcm2708-linux-gnueabi-
 
-cd tools/mkimage
-./imagetool-uncompressed.py ../linux/arch/arm/boot/zImage
-scp kernel.img pi@raspberrypi:/tmp
-cd tools/modules 
-tar czf modules.tgz * 
-scp modules.tgz pi@raspberrypi:/tmp
-cd / 
-sudo mv /tmp/kernel.img /boot/ 
-sudo tar xzf /tmp/modules.tgz 
-rm /tmp/modules.tgz
+make -j8 ARCH=arm CROSS_COMPILE=${CCPREFIX} zImage modules dtbs
+make ARCH=arm CROSS_COMPILE=${CCPREFIX} INSTALL_MOD_PATH=modules_install modules_install
+
+cd modules_install
+tar czf modules.tgz *
+
+cd arch/arm/boot/dts
+tar czf dts.tgz overlays/*.dtb bcm2709-rpi-2-b.dtb
+
+copy arch/arm/boot/Image to kernel.img
+

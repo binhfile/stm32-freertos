@@ -21,27 +21,32 @@
 #include <linux/string.h>
 #include <linux/kernel.h>
 #include <linux/device.h>
+#include <asm/io.h>
+#include <asm/uaccess.h>
 
 #include "gpio.h"
 /************************** Constant Definitions *****************************/
-#define GPIO_BASE_REG	(0x7E200000)
+#define GPIO_BASE_REG	(0x3F200000)
 #define GPIO_MEM_LEN	(0xB0)
 #define GPIO_DRV_NAME	"gpio_drv"
 // GPIO setup macros. Always use INP_GPIO(x) before using OUT_GPIO(x) or SET_GPIO_ALT(x,y)
-#define INP_GPIO(g) 		*(g_gpio_ctx.mem + ((g)/10)) &= ~(7<<(((g)%10)*3))
-#define OUT_GPIO(g) 		*(g_gpio_ctx.mem + ((g)/10)) |=  (1<<(((g)%10)*3))
-#define SET_GPIO_ALT(g,a) 	*(g_gpio_ctx.mem + (((g)/10))) |= (((a)<=3?(a) + 4:(a)==4?3:2)<<(((g)%10)*3))
 
-#define GPIO_SET(g)			*(g_gpio_ctx.mem + 7 + ((g)/32)) |= (1 << (g)%32)
-#define GPIO_CLR(g)			*(g_gpio_ctx.mem + 10 + ((g)/32)) |= (1 << (g)%32)
+#define W_REG(reg, val) iowrite32(((u32)(val)), (g_gpio_ctx.mem+(reg)));
+#define R_REG(reg) 		ioread32((g_gpio_ctx.mem+(reg)))
 
-#define GPIO_READ(g) 		((*(g_gpio_ctx.mem + 13 + ((g)/32))) &= (1<< (g)%32))
+#define INP_GPIO(g) 		W_REG( (4*((g)/10)), (R_REG((4*((g)/10)))) & (~((u32)7<<(((g)%10)*3))) )
+#define OUT_GPIO(g) 		W_REG( (4*((g)/10)), (R_REG((4*((g)/10)))) |  ((u32)1<<(((g)%10)*3)) )
 
-#define GPIO_SET_INTR_RISING(g)			*(g_gpio_ctx.mem + 0x4C + ((g)/32)) |= (1 << (g)%32)
-#define GPIO_SET_INTR_FALLING(g)		*(g_gpio_ctx.mem + 0x58 + ((g)/32)) |= (1 << (g)%32)
+#define GPIO_SET(g)			W_REG( (0x1C + (4*((g)/32))), (R_REG((0x1C + (4*((g)/32))))) | ((u32)1 << (g)%32) )
+#define GPIO_CLR(g)			W_REG( (0x28 + (4*((g)/32))), (R_REG((0x28 + (4*((g)/32))))) | ((u32)1 << (g)%32) )
+
+#define GPIO_READ(g) 		( (R_REG((0x34 + (4*((g)/32)))) >> ((g)%32)) & 1)
+
+#define GPIO_SET_INTR_RISING(g)			W_REG( 0x4C + (4*((g)/32)), (R_REG(0x4C + (4*((g)/32)))) | ((u32)1 << (g)%32) )
+#define GPIO_SET_INTR_FALLING(g)		W_REG( 0x58 + (4*((g)/32)), (R_REG(0x58 + (4*((g)/32)))) | ((u32)1 << (g)%32) )
 #define GPIO_SET_INTR_NONE(g)			{\
-	*(g_gpio_ctx.mem + 0x4C + ((g)/32)) &= ~(1 << (g)%32);\
-	*(g_gpio_ctx.mem + 0x58 + ((g)/32)) &= ~(1 << (g)%32);\
+	W_REG( 0x4C + (4*(g)/32), (R_REG(0x4C + (4*((g)/32)))) & (~((u32)1 << (g)%32)) );\
+	W_REG( 0x58 + (4*(g)/32), (R_REG(0x58 + (4*((g)/32)))) & (~((u32)1 << (g)%32)) );\
 }
 
 #define LREP(x, args...)  		printk(KERN_ALERT   GPIO_DRV_NAME ":" x , ##args)
@@ -61,7 +66,11 @@ struct GPIO_CONTEXT
 	dev_t 				dev;
 	struct cdev 		*c_dev;
 	struct resource 	*res;	
+	#if 0
 	unsigned int		*mem;
+	#else
+	void				*mem;
+	#endif
 	int major;
 	
 	struct GPIO_PIN_CONTEXT	*pin;	
@@ -125,6 +134,7 @@ int gpio_pin_set_intr(int pin, enum GPIO_INTR intr){
 			ret = request_irq(ctx->irq, gpio_x_isr, IRQF_IRQPOLL | IRQF_SHARED, ctx->name, ctx);
 			if(ret) LREP_WARN("request_irq %d fail %d\r\n", ctx->irq, ret);
 			else{
+				LREP("request_irq %d\r\n", ctx->irq);
 				init_waitqueue_head(&ctx->wait_queue);
 			}
 		}
@@ -135,8 +145,12 @@ unsigned char gpio_pin_read(int pin){
 	return GPIO_READ(pin);
 }
 unsigned char gpio_pin_write(int pin, unsigned char val){
-	if(val == 0) GPIO_CLR(pin);
-	else  GPIO_SET(pin);
+	if(val == 0){
+		 GPIO_CLR(pin);
+	 }
+	else  {
+		GPIO_SET(pin);
+	}
 	return 0;
 }
 EXPORT_SYMBOL(gpio_pin_set_dir);
@@ -146,7 +160,6 @@ EXPORT_SYMBOL(gpio_pin_write);
 
 static int gpio_x_open(struct inode *inode, struct file *filp)
 {
-	LREP("open pin\r\n");
 	return 0;
 }
 static int gpio_x_release(struct inode *inode, struct file *filp)
@@ -157,16 +170,11 @@ static ssize_t gpio_x_read(struct file *filp, char __user *buff, size_t count, l
 {
 	unsigned char ucval = 0;
 	int minor = iminor(file_inode(filp));
-	unsigned char *puc = 0;
 	
 	ucval = gpio_pin_read(minor);
-	puc = (unsigned char *)buff;
-	if(count < 0) count = 0;
-	while(count --){
-		if(copy_to_user((void __user *)puc, (const void*)&ucval, 1) != 0) break;
-		puc++;
-	}
-    return count;
+	if(count < 0) count = 0;	
+	if(copy_to_user(buff, (const void*)&ucval, 1)) return -1;
+    return 1;
 }
 static ssize_t gpio_x_write(struct file *filp, const char __user *buff, size_t count, loff_t *offp)
 {
@@ -209,6 +217,7 @@ static long gpio_x_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			}
 			if(exist){
 				LREP(GPIO_DRV_NAME "_%d is exist\r\n", pin);
+				ret = 0;
 				break;
 			}
 			device_create(g_gpio_class, NULL, MKDEV(g_gpio_ctx.major, pin), NULL, GPIO_DRV_NAME "_%d", pin);
@@ -315,6 +324,7 @@ static int GPIOInit(void)
 		unregister_chrdev_region(g_gpio_ctx.dev, 255);
 		return -1;
 	}	
+	LREP("map to %p\r\n", g_gpio_ctx.mem);
 	return result;
 }
 static void GPIOExit(void)
