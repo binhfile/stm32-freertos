@@ -52,7 +52,7 @@ ifneq (,$(findstring freertos,$(TARGET)))
 endif
 
 ifneq (,$(findstring linux,$(TARGET)))
-	TOOLCHAIN_DIR=/home/toolchain/tools-master/arm-bcm2708/arm-bcm2708-linux-gnueabi
+	TOOLCHAIN_DIR=/home/toolchain/tools/arm-bcm2708/arm-bcm2708-linux-gnueabi
 	CROSS_COMPILE=bcm2708-
 	OUTFILE=app_net
 	DEFS+=-DOS_LINUX

@@ -7,17 +7,25 @@ enum LED{
 	LED_BLUE,
 	LED_ORANGE
 };
+extern int g_fd_led[];
+
 #if defined(STM32F4XX)
 #include <gpio.h>
 #include <fcntl.h>
-extern int g_fd_led[];
 #define LED_ON(led) {uint8_t val = 1; write(g_fd_led[LED_##led], &val, 1);}
 #define LED_OFF(led) {uint8_t val = 0; write(g_fd_led[LED_##led], &val, 1);}
 #define LED_TOGGLE(led) {ioctl(g_fd_led[LED_##led], GPIO_IOC_TOGGLE, 0);}
 #else
-#define LED_ON(led)
-#define LED_OFF(led)
-#define LED_TOGGLE(led)
+#define LED_ON(led) {uint8_t val = '0'; lseek(g_fd_led[LED_##led], 0, SEEK_SET); write(g_fd_led[LED_##led], &val, 1);}
+#define LED_OFF(led) {uint8_t val = '1'; lseek(g_fd_led[LED_##led], 0, SEEK_SET); write(g_fd_led[LED_##led], &val, 1);}
+#define LED_TOGGLE(led) {\
+		uint8_t val = '0'; \
+		lseek(g_fd_led[LED_##led], 0, SEEK_SET);\
+		read(g_fd_led[LED_##led], &val, 1);\
+		if(val == '0') val = '1'; else val = '0';\
+		lseek(g_fd_led[LED_##led], 0, SEEK_SET);\
+		write(g_fd_led[LED_##led], &val, 1);\
+	}
 #endif
 
 void LREP(char* s, ...);

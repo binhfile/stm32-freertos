@@ -25,10 +25,11 @@ void *Thread_UserInput(void*);
 void *Thread_PhyIntr(void*);
 void *Thread_MiwiTask(void*);
 
-#if defined(OS_FREERTOS)
-#define             APP_THREAD_COUNT    	4
 int                 g_fd_led[4]         = {-1};
 int                 g_fd_button         = -1;
+
+#if defined(OS_FREERTOS)
+#define             APP_THREAD_COUNT    	4
 int					g_fd_rtc			= -1;
 mqd_t               g_debug_tx_buffer   = 0;
 void *Thread_DebugTX(void*);
@@ -192,6 +193,27 @@ int main(void)
 					.dir = 1,
 					.edge = 0,
 			},// miso
+			{
+					.num = 5,
+					.dir = 0,
+			},// led-1
+			{
+					.num = 6,
+					.dir = 0,
+			},// led-2
+			{
+					.num = 13,
+					.dir = 0,
+			},// led-3
+			{
+					.num = 19,
+					.dir = 0,
+			},// led-4
+			{
+					.num = 16,
+					.dir = 1,
+					.edge = 1,
+			},// button
 	};
 
 	int fd;
@@ -235,7 +257,17 @@ int main(void)
     g_setting_dev.dev.fd_sck  = open("/sys/class/gpio/gpio23/value", O_WRONLY);
     g_setting_dev.dev.fd_mosi = open("/sys/class/gpio/gpio24/value", O_WRONLY);
     g_setting_dev.dev.fd_miso =  open("/sys/class/gpio/gpio25/value", O_RDONLY);
+
+    g_fd_led[0] = open("/sys/class/gpio/gpio5/value", O_RDWR);
+    g_fd_led[1] = open("/sys/class/gpio/gpio6/value", O_RDWR);
+    g_fd_led[2] = open("/sys/class/gpio/gpio13/value", O_RDWR);
+    g_fd_led[3] = open("/sys/class/gpio/gpio19/value", O_RDWR);
+//    g_fd_button = open("/sys/class/gpio/gpio26/value", O_RDONLY);
 #endif
+    LED_OFF(RED);
+    LED_OFF(GREEN);
+    LED_OFF(BLUE);
+    LED_OFF(ORANGE);
     if(g_rf_mac_open.fd_spi < 0){
         LREP("open spi device '%s' failed %d\r\n", "/dev/spidev0.0", g_rf_mac_open.fd_spi);
     }
