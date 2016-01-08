@@ -3,7 +3,7 @@
 
 #include <signal.h>
 #include <unistd.h>
-#include <sys/select.h>
+#include <poll.h>
 #include <time.h>
 
 #include "gpio.h"
@@ -93,26 +93,25 @@ int main(int argc, char** argv){
 				fflush(stdout);
 			}
 		}else{
-			fd_set readfd;
+			struct pollfd fds[1];
 			struct timeval timeout;
-			printf("use select\r\n");
+			
+			fds[0].fd = fd;
+			fds[0].events = POLLIN | POLLRDNORM;
+			
+			printf("use poll\r\n");
 			while(!g_isTerminate){
-				timeout.tv_sec = 1;
-				timeout.tv_usec = 0;
-				FD_ZERO(&readfd);
-				FD_SET(fd, &readfd);
-				ret = select(fd+1, &readfd, 0, 0, &timeout);
+				ret = poll(fds, 1, 1000);
 				if(ret < 0){
-					printf("select fail %d\r\n", ret);
+					printf("poll fail %d\r\n", ret);
 					break;
 				}else if(ret > 0){
-					if(FD_ISSET(fd, &readfd)){
+					if(fds[0].revents & POLLIN){
 						ucval = 0;
 						ret = read(fd, &ucval, 1);
 						printf("read %d len %d\r\n", ucval, ret);
-						sleep(1);
 					}else{
-						printf("select not fd\r\n");
+						printf("poll not fd\r\n");
 					}
 				}else{
 					printf(".");

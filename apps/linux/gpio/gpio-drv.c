@@ -21,6 +21,9 @@
 #include <linux/string.h>
 #include <linux/kernel.h>
 #include <linux/device.h>
+#include <linux/workqueue.h>
+#include <linux/wait.h>
+#include <linux/signal.h>
 #include <asm/io.h>
 #include <asm/uaccess.h>
 
@@ -81,17 +84,26 @@ struct GPIO_CONTEXT	g_gpio_ctx;
 static struct class *g_gpio_class;
 /***************** Macros (Inline Functions) Definitions *********************/
 /*****************************************************************************/
-irqreturn_t gpio_x_isr (int iIrq, void * dev_id)
+static irqreturn_t gpio_x_isr (int irq, void *dev_id, struct pt_regs *regs)
 {
 	struct GPIO_PIN_CONTEXT *ctx = NULL;
+	//unsigned long flags;
+	
+	//local_irq_save(flags);
 	
 	ctx = (struct GPIO_PIN_CONTEXT *)dev_id;
-	if(!ctx) return 0;
+	if(!ctx){
+		LREP("Interrupt ctx null\r\n");
+		 return 0;
+	}
+	
+	LREP("Interrupt [%d] for device was triggered !.\n", irq);
 	
 	ctx->state = 1;
-	wake_up(&ctx->wait_queue);
+	wake_up_interruptible(&ctx->wait_queue);
 	
-	return -EINVAL;
+	//local_irq_restore(flags);
+	return IRQ_HANDLED;
 }
 struct GPIO_PIN_CONTEXT* gpio_pin_to_ctx(int pin){
 	struct GPIO_PIN_CONTEXT* ctx = 0;
@@ -113,32 +125,51 @@ int gpio_pin_set_dir(int pin, enum GPIO_DIR dir){
 }
 int gpio_pin_set_intr(int pin, enum GPIO_INTR intr){
 	struct GPIO_PIN_CONTEXT* ctx;
-	int ret;
+	int ret = -1;
+	unsigned char buff[128] = {0};
+	unsigned long  	irqflags = IRQF_TRIGGER_NONE;
+	
 	if(intr == GPIO_INTR_NONE) {
 		GPIO_SET_INTR_NONE(pin);
 	}
 	else if(intr == GPIO_INTR_RISING) {
-		GPIO_SET_INTR_RISING(pin);
+		irqflags = IRQF_TRIGGER_RISING;
 	}
 	else if(intr == GPIO_INTR_FALLING){
-		 GPIO_SET_INTR_FALLING(pin);
+		 irqflags = IRQF_TRIGGER_FALLING;
 	}
 	else if(intr == GPIO_INTR_BOTH){
-		GPIO_SET_INTR_RISING(pin);
-		GPIO_SET_INTR_FALLING(pin);
+		irqflags = IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING;
 	}
-	ctx = gpio_pin_to_ctx(pin);
-	if(ctx){
-		if(ctx->irq == -1){
-			ctx->irq = gpio_to_irq(pin);
-			ret = request_irq(ctx->irq, gpio_x_isr, IRQF_IRQPOLL | IRQF_SHARED, ctx->name, ctx);
-			if(ret) LREP_WARN("request_irq %d fail %d\r\n", ctx->irq, ret);
-			else{
-				LREP("request_irq %d\r\n", ctx->irq);
-				init_waitqueue_head(&ctx->wait_queue);
+	if(intr != GPIO_INTR_NONE){
+		ctx = gpio_pin_to_ctx(pin);
+		if(ctx){
+			if(ctx->irq == -1){
+				snprintf(buff, 127, GPIO_DRV_NAME "_%d", pin);
+				if (gpio_request(pin, buff)) {
+				  printk("GPIO request faiure: %s\n", buff);
+				  return ret;
+				}
+				
+				ctx->irq = gpio_to_irq(pin);
+				ret = request_irq(ctx->irq, (irq_handler_t ) gpio_x_isr, irqflags, ctx->name, ctx);
+				if(ret) LREP_WARN("request_irq %d fail %d\r\n", ctx->irq, ret);
+				else{
+					init_waitqueue_head(&ctx->wait_queue);
+					if(intr == GPIO_INTR_RISING) {
+						GPIO_SET_INTR_RISING(pin);
+					}
+					if(intr == GPIO_INTR_FALLING){
+						 GPIO_SET_INTR_FALLING(pin);
+					}
+					else if(intr == GPIO_INTR_BOTH){
+						GPIO_SET_INTR_RISING(pin);
+						GPIO_SET_INTR_FALLING(pin);
+					}
+				}
 			}
-		}
-	}else LREP_WARN("ctx is null\r\n");
+		}else LREP_WARN("ctx is null\r\n");
+	}
 	return 0;
 }
 unsigned char gpio_pin_read(int pin){
@@ -263,6 +294,7 @@ static unsigned int gpio_x_poll(struct file *filp, struct poll_table_struct * wa
 	if(ctx->irq == -1) return -1;
 	
 	poll_wait(filp, &ctx->wait_queue, wait);
+		
 	if(ctx->state){
 		ctx->state = 0;
 		ret = POLLIN|POLLRDNORM;
@@ -341,7 +373,10 @@ static void GPIOExit(void)
 		struct GPIO_PIN_CONTEXT* ptr_next;
 		while(ptr){
 			ptr_next = ptr->next;
-			if(ptr->irq >= 0) free_irq(ptr->irq, ptr);
+			if(ptr->irq >= 0) {
+				gpio_free(ptr->pin);
+				free_irq(ptr->irq, ptr);
+			}
 			kfree(ptr);
 			ptr = ptr_next;
 		}
