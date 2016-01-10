@@ -12,3 +12,4 @@ tar czf dts.tgz overlays/*.dtb bcm2709-rpi-2-b.dtb
 
 copy arch/arm/boot/Image to kernel.img
 
+
