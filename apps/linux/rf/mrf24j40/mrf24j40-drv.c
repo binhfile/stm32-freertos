@@ -30,6 +30,13 @@
 #define LREP_WARN(x, args...)  	printk(KERN_WARNING MRF24J40_DRV_NAME ": %d@%s" x , __LINE__, __FILE__, ##args)
 /**************************** Type Definitions *******************************/
 
+#define DRV_MRF24J40_GPIO_RESET		0
+#define DRV_MRF24J40_GPIO_INTR		1
+
+struct mrf24j40_spi{
+	int spi_bus_num;
+	int spi_chip_select;
+};
 struct MRF24J40_CONTEXT
 {
 	dev_t 				dev;
@@ -37,10 +44,23 @@ struct MRF24J40_CONTEXT
 	struct class 		*c_class;
 
 	struct spi_device *spi_device;
+	int					intr_irq;
+
+	struct gpio 		gpios[2];
+	struct mrf24j40_spi spi;
 };
 
 /************************** Variable Definitions *****************************/
-struct MRF24J40_CONTEXT	g_mrf24j40_ctx;
+struct MRF24J40_CONTEXT	g_mrf24j40_ctx = {
+		.spi = {
+				.spi_bus_num = 0,
+				.spi_chip_select = 1,
+		},
+		.gpios = {
+				{ 17, GPIOF_OUT_INIT_HIGH, "rf-reset"},
+				{ 27, GPIOF_IN,  "rf-intr" },
+		},
+};
 /***************** Macros (Inline Functions) Definitions *********************/
 /*****************************************************************************/
 static irqreturn_t mrf24j40_isr (int irq, void *dev_id, struct pt_regs *regs)
@@ -116,6 +136,7 @@ static int mrf24j40_init(void)
 	struct spi_device *spi_device;
 	char buff[64];
 	struct device *pdev;
+	int irq;
 	
 	g_mrf24j40_ctx.c_dev = 0;
     // mk dev
@@ -147,7 +168,7 @@ static int mrf24j40_init(void)
 		LREP_WARN("spi_register_driver() failed %d\n", result);
 		goto INIT_FAIL_2;
 	}
-	spi_master = spi_busnum_to_master(0);	// SPI bus 0
+	spi_master = spi_busnum_to_master(g_mrf24j40_ctx.spi.spi_bus_num);	// SPI bus 0
 	if (!spi_master) {
 		LREP_WARN("spi_busnum_to_master(%d) returned NULL\n", 1);
 		goto INIT_FAIL_2;
@@ -158,7 +179,7 @@ static int mrf24j40_init(void)
 		LREP_WARN("spi_alloc_device() failed\n");
 		goto INIT_FAIL_2;
 	}
-	spi_device->chip_select = 0;	// SPI chip select 0
+	spi_device->chip_select = g_mrf24j40_ctx.spi.spi_chip_select;	// SPI chip select 0
 
 	/* Check whether this SPI bus.cs is already claimed */
 	snprintf(buff, sizeof(buff), "%s.%u", dev_name(&spi_device->master->dev), spi_device->chip_select);
@@ -192,10 +213,30 @@ static int mrf24j40_init(void)
 		}
 	}
 	put_device(&spi_master->dev);
+	// gpio
+	result = gpio_request_array(g_mrf24j40_ctx.gpios, ARRAY_SIZE(g_mrf24j40_ctx.gpios));
+	if (result){
+		LREP_WARN("gpio_request_array fail %d\r\n", result);
+		goto INIT_FAIL_3;
+	}
+	irq = gpio_to_irq(g_mrf24j40_ctx.gpios[DRV_MRF24J40_GPIO_INTR].gpio);
+	if(irq < 0){
+		LREP_WARN("GPIO to IRQ mapping faiure\r\n");
+		goto INIT_FAIL_4;
+   }
+   if (request_irq(irq, (irq_handler_t ) mrf24j40_isr, IRQF_TRIGGER_RISING,
+		   g_mrf24j40_ctx.gpios[DRV_MRF24J40_GPIO_INTR].label,
+		   0)) {
+	   LREP_WARN("irq request failure\r\n");
+	   goto INIT_FAIL_4;
+   }
+   g_mrf24j40_ctx.intr_irq = irq;
 
 	LREP("init done\r\n");
 	result = 0;
 	goto INIT_DONE;
+INIT_FAIL_4:
+	gpio_free_array(g_mrf24j40_ctx.gpios, ARRAY_SIZE(g_mrf24j40_ctx.gpios));
 INIT_FAIL_3:
 	spi_unregister_driver(&mrf24j40_spi_drv);
 INIT_FAIL_2:
@@ -209,6 +250,9 @@ INIT_DONE:
 }
 static void mrf24j40_exit(void)
 {
+	free_irq(g_mrf24j40_ctx.intr_irq, 0);
+	gpio_free_array(g_mrf24j40_ctx.gpios, ARRAY_SIZE(g_mrf24j40_ctx.gpios));
+
 	spi_unregister_device(g_mrf24j40_ctx.spi_device);
 	spi_unregister_driver(&mrf24j40_spi_drv);
 
