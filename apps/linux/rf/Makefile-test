@@ -1,3 +1,4 @@
-CC=/home/toolchain/tools/arm-bcm2708/gcc-linaro-arm-linux-gnueabihf-raspbian/bin/arm-linux-gnueabihf-gcc
+CC=/home/toolchain/tools/arm-bcm2708/gcc-linaro-arm-linux-gnueabihf-raspbian/bin/arm-linux-gnueabihf-gcc 
+
 all:
-	$(CC) test-gpio.c -o gpio-test
+	$(CC) rf-test.c -o rf-test

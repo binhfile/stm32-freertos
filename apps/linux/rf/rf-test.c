@@ -5,8 +5,7 @@
 #include <unistd.h>
 #include <poll.h>
 #include <time.h>
-
-#include "gpio.h"
+#include "rf_mac.h"
 
 volatile int g_isTerminate = 0;
 void ISR_INT(int iSig)
@@ -16,114 +15,95 @@ void ISR_INT(int iSig)
 	signal(SIGINT, SIG_DFL);	/*^C*/
 }
 int main(int argc, char** argv){
-	if(argc < 3){
-		printf("Usage: %s pin_num in/out [rising/falling/both/none]\r\n", argv[0]);
-		return 0;
-	}
+	int fd;
+	int len, i, ret;
+	unsigned char tx[128], rx[128], ioc[32];
+	struct rf_mac_write_packet *write_pkt;
+	struct rf_mac_read_packet  *read_pkt;
+	struct pollfd fds[1];
+	struct timeval t_ref, t_now;
+	int t_diff;
+	float speed;
+
 	signal(SIGINT, ISR_INT);
 	
-	const char* sz_num = argv[1];
-	const char* sz_dir = argv[2];
-	const char* sz_intr = "none";
-	if(argc >= 4) sz_intr = argv[3];
-	int pin = atoi(sz_num);
-	enum GPIO_DIR dir = GPIO_DIR_INPUT;
-	enum GPIO_INTR intr = GPIO_INTR_NONE;
-	
-	if(strcmp(sz_dir, "out") == 0) dir = GPIO_DIR_OUTPUT;
-	if(strcmp(sz_intr, "rising") == 0) intr = GPIO_INTR_RISING;
-	if(strcmp(sz_intr, "falling") == 0) intr = GPIO_INTR_FALLING;
-	if(strcmp(sz_intr, "both") == 0) intr = GPIO_INTR_BOTH;
-		
-	printf("Pin %d dir %d interrupt %d\r\n", pin, dir, intr);
-	
-	int ret;
-	unsigned int uival;
-	int fd_gpio = open("/dev/gpio_drv", O_WRONLY);
-	if(fd_gpio < 0){
-		printf("open /dev/gpio_drv fail\r\n");
-		return -1;
-	}
-	uival = pin;
-	ret = ioctl(fd_gpio, GPIO_IOC_EXPORT_PIN, &uival);
-	printf("export pin %d ret %d\r\n", uival, ret);
-	if(ret < 0){
-		close(fd_gpio);
-		return -1;
-	}
-	char buffer[32];
-	snprintf(buffer, 31, "/dev/gpio_drv_%d", pin);
-	int fd = open(buffer, O_RDWR);
+	fd = open("/dev/mrf24j40", O_RDWR);
 	if(fd < 0){
-		printf("open %s fail %d\r\n", buffer, fd);
-		close(fd_gpio);
-		return -1;
-	}
-	uival = dir;
-	ret = ioctl(fd, GPIO_IOC_WR_DIR, &uival);	
-	if(ret < 0){
-		printf("set dir %d fail %d\r\n", pin, ret);
-		goto EXIT;		
+		printf("open device fail\r\n");
+		return (0);
 	}
 	
-	if(dir == GPIO_DIR_OUTPUT){
-		unsigned char ucval = 0;
-		while(!g_isTerminate){
-			ret = write(fd, &ucval, 1);
-			printf("write %d ret %d\r\n", ucval, ret);
-			ucval = !ucval;
-			sleep(1);
-		}
+	write_pkt = (struct rf_mac_write_packet*)tx;
+	read_pkt = (struct rf_mac_read_packet*)rx;
+	for(len = 0; len < 8; len ++){
+		write_pkt->header.dest_addr[len] = len;
 	}
-	else if(dir == GPIO_DIR_INPUT){
-		unsigned char ucval = 0;		
-		uival = intr;
-		ret = ioctl(fd, GPIO_IOC_WR_INTR, &uival);	
+	write_pkt->header.flags.bits.ack_req 	= 0;
+	write_pkt->header.flags.bits.broadcast 	= 1;
+	write_pkt->header.flags.bits.intra_pan 	= 0;
+	write_pkt->header.flags.bits.dest_addr_64bit 	= 0;
+	write_pkt->header.flags.bits.src_addr_64bit 	= 1;
+	write_pkt->data_len = 100;
+
+	ioc[0] = 0x01;
+	ioc[1] = 0x02;
+	ret = ioctl(fd, RF_MAC_IOC_WR_SHORT_ADDRESS, ioc);
+	if(ret < 0) printf("ioc ret = %d\r\n", ret);
+	ioc[0] = 0x01;
+	ioc[1] = 0x02;
+	ioc[2] = 0x03;
+	ioc[3] = 0x04;
+	ioc[4] = 0x05;
+	ioc[5] = 0x06;
+	ioc[6] = 0x07;
+	ioc[7] = 0x08;
+	ret = ioctl(fd, RF_MAC_IOC_WR_LONG_ADDRESS, ioc);
+	if(ret < 0) printf("ioc ret = %d\r\n", ret);
+	ioc[0] = 0xFF;
+	ioc[1] = 0xFF;
+	ret = ioctl(fd, RF_MAC_IOC_WR_PAN_ID, ioc);
+	if(ret < 0) printf("ioc ret = %d\r\n", ret);
+
+	gettimeofday(&t_ref);
+	for(i = 0; i < 100; i++){
+		fds[0].fd = fd;
+		fds[0].events = POLLOUT | POLLIN;
+
+		ret = poll(fds, 1, 1000);
 		if(ret < 0){
-			printf("set interrupt %d fail %d\r\n", pin, ret);
-			goto EXIT;		
-		}
-		if(intr == GPIO_INTR_NONE){
-			printf("no select\r\n");
-			while(!g_isTerminate){
-				ucval = 0;
-				ret = read(fd, &ucval, 1);
-				printf("read %d len %d\r\n", ucval, ret);
-				sleep(1);
-				fflush(stdout);
+			printf("poll fail %d\r\n", ret);
+			break;
+		}else if(ret > 0){
+			if(fds[0].revents & POLLOUT){
+				len = ioctl(fd, RF_MAC_IOC_WR_PACKET, write_pkt);
+				if(len < 0)
+					printf("[%d] write ret = %d\r\n", i, len);
+			}
+			else if(fds[0].revents & POLLIN){
+				len = ioctl(fd, RF_MAC_IOC_RD_PACKET, read_pkt);
+				printf("[%d] read ret = %d\r\n", i, len);
+			}
+			else if(fds[0].revents & POLLERR){
+				printf("[%d] error\r\n");
+			}
+			else{
+				printf("poll not fd\r\n");
 			}
 		}else{
-			struct pollfd fds[1];
-			struct timeval timeout;
-			
-			fds[0].fd = fd;
-			fds[0].events = POLLIN | POLLRDNORM;
-			
-			printf("use poll\r\n");
-			while(!g_isTerminate){
-				ret = poll(fds, 1, 1000);
-				if(ret < 0){
-					printf("poll fail %d\r\n", ret);
-					break;
-				}else if(ret > 0){
-					if(fds[0].revents & POLLIN){
-						ucval = 0;
-						ret = read(fd, &ucval, 1);
-						printf("read %d len %d\r\n", ucval, ret);
-					}else{
-						printf("poll not fd\r\n");
-					}
-				}else{
-					printf(".");
-				}
-				fflush(stdout);
-			}
+			printf(".");
 		}
+		fflush(stdout);
 	}
-	
-EXIT:
+	gettimeofday(&t_now);
+	t_diff = t_now.tv_sec * 1000 + t_now.tv_usec / 1000 - (t_ref.tv_sec * 1000 + t_ref.tv_usec / 1000);
+	if(t_diff > 0){
+		speed = write_pkt->data_len * 100.0f / t_diff * 8;
+		printf("diff %u ms speed %.02f kbps (%.02f%%)\r\n",
+				t_diff,
+				speed, speed*100 / 256.0f);
+	}
+	sleep(1);
 	close(fd);
-	close(fd_gpio);	
 	printf("exit\r\n");
 	return 0;
 }
