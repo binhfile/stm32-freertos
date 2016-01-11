@@ -587,10 +587,19 @@ static irqreturn_t mrf24j40_isr (int irq, void *dev_id, struct pt_regs *regs)
 
 static int mrf24j40_open(struct inode *inode, struct file *filp)
 {
+	int i;
 	if(g_mrf24j40_ctx.is_opened) return -1;
 
 	//LREP("open");
 	mrf24j40_initialize();
+
+	for(i = 0; i < DRV_MRF24J40_WRITE_COUNT; i++){
+		g_mrf24j40_ctx.write_list[i].flags = 0x00;
+	}
+	for(i = 0; i < DRV_MRF24J40_READ_COUNT; i++){
+		g_mrf24j40_ctx.read_list[i].flags = 0x00;
+	}
+	g_mrf24j40_ctx.mode = mrf24j40_mode_rx;
 
 	g_mrf24j40_ctx.is_opened  = 1;
 	return 0;
