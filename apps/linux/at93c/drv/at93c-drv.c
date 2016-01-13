@@ -5,72 +5,65 @@
 #include <linux/module.h>
 #include <linux/kdev_t.h>
 #include <linux/cdev.h>
-#include <linux/interrupt.h>
-#include <linux/irqreturn.h>
 #include <linux/poll.h>
-#include <linux/sched.h>
 #include <linux/irq.h>
 #include <linux/slab.h>
-#include <linux/semaphore.h>
-#include <linux/spinlock.h>
 #include <linux/string.h>
 #include <linux/kernel.h>
 #include <linux/device.h>
 #include <linux/wait.h>
 #include <linux/fs.h>
-#include <linux/mutex.h>
 #include <linux/delay.h>
-#include <linux/workqueue.h>
-#include <linux/spinlock.h>
 
-#include <linux/spi/spi.h>
 #include <linux/gpio.h>
 
 
 #include "../at93c.h"
 #include "at93c_def.h"
 /************************** Constant Definitions *****************************/
-#define AT93C_DRV_NAME            "at93c"
-#define LREP(x, args...)          printk(KERN_ALERT   AT93C_DRV_NAME ":" x , ##args)
-#define LREP_WARN(x, args...)      printk(KERN_ALERT    AT93C_DRV_NAME ": %d@%s " x , __LINE__, __FILE__, ##args)
+#define AT93C_DRV_NAME          "at93c"
+#define LREP(x, args...)        printk(KERN_ALERT   AT93C_DRV_NAME ":" x , ##args)
+#define LREP_WARN(x, args...)   printk(KERN_ALERT   AT93C_DRV_NAME ": %d@%s " x , __LINE__, __FILE__, ##args)
 /**************************** Type Definitions *******************************/
 
-#define AT93C_DRV_GPIO_SCK        0
-#define AT93C_DRV_GPIO_MOSI        1
-#define AT93C_DRV_GPIO_MISO        2
-#define AT93C_DRV_GPIO_CS        3
+#define AT93C_DRV_GPIO_SCK      0
+#define AT93C_DRV_GPIO_MOSI     1
+#define AT93C_DRV_GPIO_MISO     2
+#define AT93C_DRV_GPIO_CS       3
 
 struct at93c_device_info{
-    u8                    is_opened;
-    loff_t                offset;
+    u8      is_opened;
+    loff_t  offset;
 };
 
 struct AT93C_CONTEXT
 {
-    dev_t                 dev;
-    struct cdev         *c_dev;
-    struct class         *c_class;
+    dev_t           dev;
+    struct cdev     *c_dev;
+    struct class    *c_class;
 
     struct at93c_device_info    *device_info;
-    int                             device_count;
+    int             device_count;
 };
 /************************** Variable Definitions *****************************/
 struct AT93C_CONTEXT    g_at93c_ctx;
 struct at93c_board_info{
-    struct gpio         gpios[4];
-    int                 size;
+    struct gpio gpios[4];
+    int         size;
+    char*       name;
 };
 
 struct at93c_board_info g_at93c_board_info[1] = {
-        {
-                .gpios = {
-                                { 23, GPIOF_OUT_INIT_LOW,  "sck"},
-                                { 24, GPIOF_OUT_INIT_LOW,  "mosi"},
-                                { 25, GPIOF_IN,            "miso" },
-                                { 22, GPIOF_OUT_INIT_HIGH, "cs"},
-                        },
-                 .size = AT93C66_SIZE,
-        },
+    {
+        .gpios = {
+            { 23, GPIOF_OUT_INIT_LOW,  "sck"},
+            { 24, GPIOF_OUT_INIT_LOW,  "mosi"},
+            { 25, GPIOF_IN,            "miso"},
+            { 22, GPIOF_OUT_INIT_HIGH, "cs"},
+         },
+         .size = AT93C66_SIZE,
+         .name = "at93c66",
+    },
 };
 
 /***************** Macros (Inline Functions) Definitions *********************/
@@ -429,14 +422,24 @@ static ssize_t at93c_write(struct file *filp, const char __user *buff, size_t co
     g_at93c_ctx.device_info[minor].offset += *offp + count;
     return count;
 }
-
-
 static long at93c_ioctl(struct file *filp, unsigned int cmd, unsigned long arg){
     int minor = iminor(file_inode(filp));
     long ret = -EINVAL;
     switch(cmd){
         case AT93C_IOC_WR_ERASE_ALL:{
             at93c_erase_all(&g_at93c_ctx, minor);
+            ret = 0;
+            break;
+        }
+        case AT93C_IOC_RD_SIZE:{
+            unsigned int *val = (unsigned int*)arg;
+            *val = g_at93c_board_info[minor].size;
+            ret = 0;
+            break;
+        }
+        case AT93C_IOC_RD_NAME:{
+            unsigned char *val = (unsigned char*)arg;
+            strncpy(val, g_at93c_board_info[minor].name, 31);
             ret = 0;
             break;
         }
@@ -447,7 +450,7 @@ static long at93c_ioctl(struct file *filp, unsigned int cmd, unsigned long arg){
 }
 static unsigned int at93c_poll(struct file *filp, struct poll_table_struct * wait)
 {
-    int ret = 0;
+    int ret = -1;
 
     return ret;
 }
@@ -478,14 +481,14 @@ loff_t at93c_llseek (struct file *filp, loff_t off, int whence){
 /*File operations of device*/
 const char g_at93c_drv_name[] = "at93c";
 static struct file_operations at93c_fops = {
-    .owner             = THIS_MODULE,
-    .read             = at93c_read,
-    .write             = at93c_write,
+    .owner  = THIS_MODULE,
+    .read   = at93c_read,
+    .write  = at93c_write,
     .unlocked_ioctl = at93c_ioctl,
-    .open             = at93c_open,
-    .release         = at93c_release,
-    .poll             = at93c_poll,
-    .llseek            = at93c_llseek,
+    .open           = at93c_open,
+    .release        = at93c_release,
+    .poll   = at93c_poll,
+    .llseek = at93c_llseek,
 };
 static int at93c_init(void)
 {
@@ -499,7 +502,6 @@ static int at93c_init(void)
         LREP_WARN("no device board info\r\n");
         return -1;
     }
-
     g_at93c_ctx.device_info = (struct at93c_device_info*)kmalloc(sizeof(struct at93c_device_info) * g_at93c_ctx.device_count, GFP_ATOMIC);
     for(i = 0; i < g_at93c_ctx.device_count; i++){
         g_at93c_ctx.device_info[i].is_opened = 0;
