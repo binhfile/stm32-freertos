@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <poll.h>
 #include <time.h>
+#include <pthread.h>
 #include "rf_mac.h"
 
 volatile int g_isTerminate = 0;
@@ -27,6 +28,8 @@ int main(int argc, char** argv){
 
 	signal(SIGINT, ISR_INT);
 	
+	pthread_setschedprio(pthread_self(), 99);
+
 	fd = open("/dev/mrf24j40", O_RDWR);
 	if(fd < 0){
 		printf("open device fail\r\n");

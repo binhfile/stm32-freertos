@@ -1,4 +1,4 @@
 CC=/home/toolchain/tools/arm-bcm2708/gcc-linaro-arm-linux-gnueabihf-raspbian/bin/arm-linux-gnueabihf-gcc 
 
 all:
-	$(CC) rf-test.c -o rf-test -lpthread -lrt
+	$(CC) at93c-test.c -o at93c-test -lpthread -lrt
