@@ -290,6 +290,9 @@ static ssize_t at93c_read(struct file *filp, char __user *buff, size_t count, lo
     int ret;
     u16 address;
 
+    if(count <= 0) return 0;
+    if(count > g_at93c_board_info[minor].size) count = g_at93c_board_info[minor].size;
+
     mbuff = (u8*)kmalloc(sizeof(u8)*count, GFP_ATOMIC);
     pu8  = mbuff;
     address = g_at93c_ctx.device_info[minor].offset + *offp;
@@ -347,7 +350,7 @@ static ssize_t at93c_read(struct file *filp, char __user *buff, size_t count, lo
     DRV_AT93C_SET_GPIO(g_at93c_board_info[minor].gpios[AT93C_DRV_GPIO_CS].gpio, 1);
     DRV_AT93C_DELAY_CS();
 
-    copy_to_user(buff, mbuff, count);
+    ret = copy_to_user(buff, mbuff, count);
 
     kfree(mbuff);
 
@@ -363,8 +366,11 @@ static ssize_t at93c_write(struct file *filp, const char __user *buff, size_t co
     u16 address;
     int minor = iminor(file_inode(filp));
 
+    if(count <= 0) return 0;
+    if(count > g_at93c_board_info[minor].size) count = g_at93c_board_info[minor].size;
+
     mbuff = (u8*)kmalloc(sizeof(u8)*count, GFP_ATOMIC);
-    copy_from_user(mbuff, buff, count);
+    ret = copy_from_user(mbuff, buff, count);
     pu8  = mbuff;
     address = g_at93c_ctx.device_info[minor].offset + *offp;
 
@@ -540,7 +546,6 @@ static int at93c_init(void)
         }
         LREP("register device %s\r\n", buffer);
     }
-
 
     LREP("init done\r\n");
     result = 0;
