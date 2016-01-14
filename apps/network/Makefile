@@ -61,6 +61,7 @@ ifneq (,$(findstring linux,$(TARGET)))
 	
 	CSOURCES+=$(shell find -L $(EXTRALIB_DIR)/special/linux -name '*.c')
 	INC+=$(shell find -L $(EXTRALIB_DIR)/special/include -name '*.h' -exec dirname {} \; | uniq)
+	INC+=os
 	
 	CXXFLAGS+=-ggdb -g3
 	CFLAGS+=-ggdb -g3

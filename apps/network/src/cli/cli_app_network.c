@@ -10,7 +10,6 @@
 #include <Network.h>
 #include <string.h>
 
-extern struct mac_mrf24j40         	g_rf_mac;
 extern struct network				g_nwk;
 const char cli_app_network_description[] = "Network layer tools";
 
@@ -35,7 +34,7 @@ int cli_app_network_callback(int argc, char** argv, void* user){
 		else if(strcmp(argv[1], "scan") == 0){
 			uint8_t noise_level[13];
 			LREP("\r\n");
-			Network_scan_channel(&g_rf_mac, 0x03FFF800, noise_level);
+			Network_scan_channel(&g_nwk, 0x03FFF800, noise_level);
 			LREP("\r\n");
 	   }
 		else if(strcmp(argv[1], "parent") == 0){

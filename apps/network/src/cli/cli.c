@@ -47,7 +47,7 @@ void LREP(char* s, ...){
     sem_post(&g_sem_debug);
 }
 #ifndef isprint
-int isprint(unsigned char ch){
+int isprint(int ch){
     return ((ch >= 32) && (ch <= 126));
 }
 #endif

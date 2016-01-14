@@ -9,12 +9,12 @@
 #include <debug.h>
 #include <unistd.h>
 #include <stdlib.h>
-#include <mac_mrf24j40.h>
 #include <setting.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
 #include <time.h>
+#include <poll.h>
 
 #define time_diff(now, ref)		((now.tv_sec * 1000 + now.tv_nsec / 1000000) - (ref.tv_sec * 1000 + ref.tv_nsec / 1000000))
 
@@ -22,13 +22,12 @@ struct setting_value		g_setting;
 
 #define NWK_LREP(x, args...) LREP("nwk: " x, ##args)
 #define NWK_LREP_WARN(x, args...) LREP("nwk %d@%s: " x, __LINE__, __FILE__,  ##args)
-#define NWK_PANID(nwk)	(((uint16_t)nwk->mac->phy.pan_id[0]) & 0x00FF) | ((((uint16_t)nwk->mac->phy.pan_id[1]) << 8) & 0xFF00)
 #define NETWORK_H_BAR_LEN	80
-int Network_scan_channel(struct mac_mrf24j40 *mac, uint32_t channels, uint8_t * noise_level){
+int Network_scan_channel(struct network *nwk, uint32_t channels, uint8_t * noise_level){
 	int timeout = 1000;
 	int ret = 0;
 	unsigned int i, j;
-	struct mac_channel_assessment ch_assessment;
+	struct rf_mac_channel_assessment ch_assessment;
 	struct timespec t_now, t_ref;
 	uint8_t u8val;
 
@@ -44,10 +43,10 @@ int Network_scan_channel(struct mac_mrf24j40 *mac, uint32_t channels, uint8_t * 
 		if( (((uint32_t)1) << i) & channels ){
 			LREP("ch: %02d ", i);
 			u8val = 0;
-			MAC_mrf24j40_ioctl(mac, mac_mrf24j40_ioc_set_channel, (unsigned int)&i);
+			ioctl(nwk->mac_fd, RF_MAC_IOC_WR_CHANNEL, &i);
 			clock_gettime(CLOCK_REALTIME, &t_ref);
 			while(1){
-				MAC_mrf24j40_ioctl(mac, mac_mrf24j40_ioc_channel_assessment, (unsigned int)&ch_assessment);
+			    ioctl(nwk->mac_fd, RF_MAC_IOC_RD_CHANNEL_ASSESSMENT, &ch_assessment);
 				if(ch_assessment.noise_level > u8val) u8val = ch_assessment.noise_level;
 				clock_gettime(CLOCK_REALTIME, &t_now);
 				if(t_now.tv_sec < t_ref.tv_sec) break;
@@ -71,10 +70,11 @@ int Network_scan_channel(struct mac_mrf24j40 *mac, uint32_t channels, uint8_t * 
 
 	return ret;
 }
-int Network_init(struct network *nwk){
+int Network_init(struct network *nwk, int mac_fd){
 	int i = 0;
 	nwk->lock = 0;
 	nwk->parent_id = 0;
+	nwk->mac_fd = mac_fd;
 	for(i = 0; i < NWK_CHILD_CNT; i++){
 		nwk->child[i].flags.bits.active = 0;
 	}
@@ -112,168 +112,195 @@ int Network_remove_child(struct network *nwk, uint16_t id){
 	return 0;
 }
 int Network_beacon_request(struct network *nwk){
-	struct mac_mrf24j40_write_param write_param;
+	struct rf_mac_write_packet *write_param;
 	int len;
 	struct network_packet *pkt;
-//	struct network_args_beacon_req *req;
 	char buff[32];
 
-	pkt = (struct network_packet *)buff;
-//	req = (struct network_args_beacon_req *)pkt->args;
+	write_param = (struct rf_mac_write_packet *)buff;
+    pkt = (struct network_packet *)write_param->data;
 
-	write_param.flags.bits.packetType 	= MAC_MRF24J40_PACKET_TYPE_DATA;
-	write_param.flags.bits.broadcast	= 1;
-	write_param.flags.bits.ackReq		= 0;
-	write_param.flags.bits.secEn		= 0;
-	write_param.flags.bits.intraPAN		= 0;
-	write_param.destPANId 				= 0xffff;
-	write_param.destAddress 			= 0xffff;
-	write_param.srcAddressMode			= mac_iee802154_addrmode_64bit;
-	write_param.destAddressMode			= mac_iee802154_addrmode_16bit;
+	write_param->header.flags.bits.ack_req          = 0;
+	write_param->header.flags.bits.broadcast        = 1;
+	write_param->header.flags.bits.intra_pan        = 0;
+	write_param->header.flags.bits.dest_addr_64bit  = 0;
+	write_param->header.flags.bits.src_addr_64bit   = 1;
+	SET_RF_MAC_WRITE_DEST_PAN(&write_param->header, 0xFFFF);
+	SET_RF_MAC_WRITE_DEST_ADDR_SHORT(&write_param->header, 0xFFFF);
 
 	pkt->hops = 1;
 	pkt->type = network_packet_type_beacon_req;
-	len = sizeof(struct network_packet) - 1 + sizeof(struct network_args_beacon_req);
+	write_param->data_len = sizeof(struct network_packet) - 1 + sizeof(struct network_args_beacon_req);
 
-	MAC_mrf24j40_write(nwk->mac, &write_param, pkt, len);
+	ioctl(nwk->mac_fd, RF_MAC_IOC_WR_PACKET, write_param);
+
 	return 0;
 }
 int Network_detect_current_network(struct network *nwk, unsigned int channel, struct network_beacon_info *info, int info_max_count){
 	int ret = 0, i;
 	int ival;
-    struct mac_mrf24j40_read_param read_param;
     struct network_packet* nwk_packet;
     struct network_args_beacon_res *res;
     char buff[32];
     struct timespec t_ref, t_now;
+    struct pollfd poll_fd[1];
+    struct rf_mac_read_packet* read_mac;
 
-	MAC_mrf24j40_ioctl(nwk->mac, mac_mrf24j40_ioc_set_channel, (unsigned int)&channel);
-	MAC_mrf24j40_ioctl(nwk->mac, mac_mrf24j40_ioc_reset, 0);
+    ioctl(nwk->mac_fd, RF_MAC_IOC_WR_CHANNEL, &channel);
+    ioctl(nwk->mac_fd, RF_MAC_IOC_WR_RESET, 0);
+
+    read_mac = (struct rf_mac_read_packet*)buff;
 
 	clock_gettime(CLOCK_REALTIME, &t_ref);
 	Network_beacon_request(nwk);
 	do{
-		ival = MAC_mrf24j40_read(nwk->mac, &read_param, buff, 32, 1000);
-		if(ival >= sizeof(struct network_packet)-1 + sizeof(struct network_args_beacon_res)){
-			nwk_packet = (struct network_packet*)buff;
+	    poll_fd[0].fd = nwk->mac_fd;
+	    poll_fd[0].events = POLLIN;
+	    poll_fd[0].revents = 0;
+	    ival = poll(poll_fd, 1, 1000);
+	    read_mac->data_len = 0;
+	    if(ival > 0 && (poll_fd[0].revents & POLLIN)){
+	        ival = ioctl(nwk->mac_fd, RF_MAC_IOC_RD_PACKET, read_mac);
+	    }
+		if(read_mac->data_len >= sizeof(struct network_packet)-1 + sizeof(struct network_args_beacon_res)){
+			nwk_packet = (struct network_packet*)read_mac->data;
 			res = (struct network_args_beacon_res *)nwk_packet->args;
 			if(nwk_packet->type == network_packet_type_beacon_res){
 				for(i = 0; i < ret; i++){
 					if(		info[i].panId == res->panId &&
 							info[i].address == res->address &&
-							info[i].rssi  == read_param.rssi &&
-							info[i].lqi   == read_param.lqi)
+							info[i].rssi  == read_mac->header.rssi &&
+							info[i].lqi   == read_mac->header.lqi)
 						break;
 				}
 				if(i == ret){
 					info[ret].panId = res->panId;
 					info[ret].address = res->address;
-					info[ret].rssi  = read_param.rssi;
-					info[ret].lqi   = read_param.lqi;
+					info[ret].rssi  = read_mac->header.rssi;
+					info[ret].lqi   = read_mac->header.lqi;
 					ret++;
 				}
 				//break;
 			}else NWK_LREP("recv type %02X not beacon respond type\r\n", nwk_packet->type);
 		}else if(ival > 0){
-			NWK_LREP("recv %d bytes\r\n", ival);
+			NWK_LREP("recv %d bytes\r\n", read_mac->data_len);
 		}else break;
 		clock_gettime(CLOCK_REALTIME, &t_now);
 	}
 	while((time_diff(t_now, t_ref) < 1000) && (ret < info_max_count));
 	return ret;
 }
-int Network_beacon_respond(struct network *nwk, uint64_t destLongAddress){
+int Network_beacon_respond(struct network *nwk, uint8_t *destLongAddress){
 	int ret = 0;
-	struct mac_mrf24j40_write_param write_param;
 	int len;
 	struct network_packet *pkt;
 	struct network_args_beacon_res *res;
 	uint8_t buff[32];
+	struct rf_mac_write_packet *write_mac;
+	uint8_t io_buf[8];
+	int i;
 
-	write_param.flags.bits.packetType 	= MAC_MRF24J40_PACKET_TYPE_DATA;
-	write_param.flags.bits.broadcast	= 0;
-	write_param.flags.bits.ackReq		= 0;
-	write_param.flags.bits.secEn		= 0;
-	write_param.flags.bits.intraPAN		= 0;
-	write_param.destPANId 				= 0xFFFF;
-	write_param.destAddress 			= destLongAddress;
-	write_param.srcAddressMode			= mac_iee802154_addrmode_16bit;
-	write_param.destAddressMode			= mac_iee802154_addrmode_64bit;
+	write_mac = (struct rf_mac_write_packet *)buff;
+    pkt = (struct network_packet *)write_mac->data;
+    res = (struct network_args_beacon_res*)pkt->args;
 
-	pkt = (struct network_packet*)buff;
-	res = (struct network_args_beacon_res*)pkt->args;
+    write_mac->header.flags.bits.ack_req          = 0;
+    write_mac->header.flags.bits.broadcast        = 0;
+    write_mac->header.flags.bits.intra_pan        = 0;
+    write_mac->header.flags.bits.dest_addr_64bit  = 1;
+    write_mac->header.flags.bits.src_addr_64bit   = 0;
+    SET_RF_MAC_WRITE_DEST_PAN(&write_mac->header, 0xFFFF);
+    for(i = 0; i < 8; i++)
+        write_mac->header.dest_addr[i] = destLongAddress[i];
+
 	pkt->hops = 1;
 	pkt->type = network_packet_type_beacon_res;
-	res->panId = (((uint16_t)nwk->mac->phy.pan_id[0]) & 0x00FF) | ((((uint16_t)nwk->mac->phy.pan_id[1]) << 8) & 0xFF00);
-	res->address = (((uint16_t)nwk->mac->phy.s_address[0]) & 0x00FF) | ((((uint16_t)nwk->mac->phy.s_address[1]) & 0x00FF) << 8);
-	len = sizeof(struct network_packet) - 1 + sizeof(struct network_args_beacon_res);
+	ioctl(nwk->mac_fd, RF_MAC_IOC_RD_PAN_ID, io_buf);
+	res->panId = (((uint16_t)io_buf[0]) & 0x00FF) | ((((uint16_t)io_buf[1]) << 8) & 0xFF00);
+	ioctl(nwk->mac_fd, RF_MAC_IOC_RD_SHORT_ADDRESS, io_buf);
+	res->address = (((uint16_t)io_buf[0]) & 0x00FF) | ((((uint16_t)io_buf[1]) & 0x00FF) << 8);
+	write_mac->data_len = sizeof(struct network_packet) - 1 + sizeof(struct network_args_beacon_res);
 
-	MAC_mrf24j40_write(nwk->mac, &write_param, pkt, len);
+	ioctl(nwk->mac_fd, RF_MAC_IOC_WR_PACKET, write_mac);
 	return ret;
 }
 int Network_join_send_done(struct network *nwk){
 	int ret = 0, i;
-	struct mac_mrf24j40_write_param write_param;
 	int len;
 	struct network_packet *pkt;
 	struct network_args_join_done *done;
 	uint8_t buff[32];
+	uint8_t io_buf[8];
+	struct rf_mac_write_packet *write_mac;
 
-	write_param.flags.bits.packetType 	= MAC_MRF24J40_PACKET_TYPE_DATA;
-	write_param.flags.bits.broadcast	= 0;
-	write_param.flags.bits.ackReq		= 0;
-	write_param.flags.bits.secEn		= 0;
-	write_param.flags.bits.intraPAN		= 0;
-	write_param.destPANId 				= NWK_PANID(nwk);
-	write_param.destAddress 			= nwk->parent_id;
-	write_param.srcAddressMode			= mac_iee802154_addrmode_16bit;
-	write_param.destAddressMode			= mac_iee802154_addrmode_16bit;
+	write_mac = (struct rf_mac_write_packet *)buff;
+	pkt = (struct network_packet *)write_mac->data;
+    done = (struct network_args_join_done*)pkt->args;
 
-	pkt = (struct network_packet*)buff;
-	done = (struct network_args_join_done*)pkt->args;
+    write_mac->header.flags.bits.ack_req          = 0;
+    write_mac->header.flags.bits.broadcast        = 0;
+    write_mac->header.flags.bits.intra_pan        = 0;
+    write_mac->header.flags.bits.dest_addr_64bit  = 0;
+    write_mac->header.flags.bits.src_addr_64bit   = 0;
+    ioctl(nwk->mac_fd, RF_MAC_IOC_RD_PAN_ID, io_buf);
+    write_mac->header.dest_pan_id[0] = io_buf[0];
+    write_mac->header.dest_pan_id[1] = io_buf[1];
+    SET_RF_MAC_WRITE_DEST_ADDR_SHORT(&write_mac->header, nwk->parent_id);
+
 	pkt->hops = 1;
 	pkt->type = network_packet_type_join_done;
-	for(i = 0; i < 8; i++) done->long_address[i] = nwk->mac->phy.l_address[i];
+	ioctl(nwk->mac_fd, RF_MAC_IOC_RD_LONG_ADDRESS, io_buf);
+	for(i = 0; i < 8; i++) done->long_address[i] = io_buf[i];
 
-	len = sizeof(struct network_packet) - 1 + sizeof(struct network_args_join_done);
+	write_mac->data_len = sizeof(struct network_packet) - 1 + sizeof(struct network_args_join_done);
 
-	MAC_mrf24j40_write(nwk->mac, &write_param, pkt, len);
+	ioctl(nwk->mac_fd, RF_MAC_IOC_WR_PACKET, write_mac);
 	return ret;
 }
 int Network_join_request(struct network *nwk, unsigned int channel, uint16_t panId, uint16_t address, struct network_join_info* info){
 	int ret = -1;
-	struct mac_mrf24j40_write_param write_param;
 	int len;
 	struct network_packet *pkt;
 	struct network_args_join_res *res;
-	struct mac_mrf24j40_read_param read_param;
 	uint8_t buff[32];
 	struct timespec t_ref, t_now;
+	struct rf_mac_write_packet *write_mac;
+	struct rf_mac_read_packet  *read_mac;
+	struct pollfd poll_fd[1];
 
-	MAC_mrf24j40_ioctl(nwk->mac, mac_mrf24j40_ioc_set_channel, (unsigned int)&channel);
+	ioctl(nwk->mac_fd, RF_MAC_IOC_WR_CHANNEL, &channel);
 
-	write_param.flags.bits.packetType 	= MAC_MRF24J40_PACKET_TYPE_DATA;
-	write_param.flags.bits.broadcast	= 0;
-	write_param.flags.bits.ackReq		= 1;
-	write_param.flags.bits.secEn		= 0;
-	write_param.flags.bits.intraPAN		= 0;
-	write_param.destPANId 				= panId;
-	write_param.destAddress 			= address;
-	write_param.srcAddressMode			= mac_iee802154_addrmode_64bit;
-	write_param.destAddressMode			= mac_iee802154_addrmode_16bit;
+	write_mac = (struct rf_mac_write_packet *)buff;
+    pkt = (struct network_packet*)write_mac->data;
 
-	pkt = (struct network_packet*)buff;
+    write_mac->header.flags.bits.ack_req          = 1;
+    write_mac->header.flags.bits.broadcast        = 0;
+    write_mac->header.flags.bits.intra_pan        = 0;
+    write_mac->header.flags.bits.dest_addr_64bit  = 0;
+    write_mac->header.flags.bits.src_addr_64bit   = 0;
+    SET_RF_MAC_WRITE_DEST_PAN(&write_mac->header, panId);
+    SET_RF_MAC_WRITE_DEST_ADDR_SHORT(&write_mac->header, address);
+
 	pkt->hops = 1;
 	pkt->type = network_packet_type_join_req;
-	len = sizeof(struct network_packet) - 1 + sizeof(struct network_args_join_req);
-	MAC_mrf24j40_ioctl(nwk->mac, mac_mrf24j40_ioc_reset, 0);
+	write_mac->data_len = sizeof(struct network_packet) - 1 + sizeof(struct network_args_join_req);
+
+	ioctl(nwk->mac_fd, RF_MAC_IOC_WR_RESET, 0);
 
 	clock_gettime(CLOCK_REALTIME, &t_ref);
-	MAC_mrf24j40_write(nwk->mac, &write_param, pkt, len);	// get request
+	ioctl(nwk->mac_fd, RF_MAC_IOC_WR_PACKET, write_mac);
+	read_mac = (struct rf_mac_read_packet *)buff;
 	do{
-		len = MAC_mrf24j40_read(nwk->mac, &read_param, buff, 32, 1000);
-		if(len >= sizeof(struct network_packet)-1 + sizeof(struct network_args_join_res)){
-			pkt = (struct network_packet*)buff;
+	    poll_fd[0].fd = nwk->mac_fd;
+        poll_fd[0].events = POLLIN;
+        poll_fd[0].revents = 0;
+        len = poll(poll_fd, 1, 1000);
+        read_mac->data_len = 0;
+        if(len > 0 && (poll_fd[0].revents & POLLIN)){
+            len = ioctl(nwk->mac_fd, RF_MAC_IOC_RD_PACKET, read_mac);
+        }
+		if(read_mac->data_len >= sizeof(struct network_packet)-1 + sizeof(struct network_args_join_res)){
+			pkt = (struct network_packet*)read_mac->data;
 			res = (struct network_args_join_res *)pkt->args;
 			if(pkt->type == network_packet_type_join_res){
 				info->address = res->address;
@@ -281,64 +308,68 @@ int Network_join_request(struct network *nwk, unsigned int channel, uint16_t pan
 				break;
 			}else NWK_LREP("recv type %2X not join respond type\r\n", pkt->type);
 		}else if(len > 0){
-			NWK_LREP("recv %d bytes\r\n", len);
+			NWK_LREP("recv %d bytes\r\n", read_mac->data_len);
 		}
 		clock_gettime(CLOCK_REALTIME, &t_now);
 	}while(time_diff(t_now, t_ref) < 1000);
 	return ret;
 }
-int Network_join_respond(struct network *nwk, uint64_t destAddr){
+int Network_join_respond(struct network *nwk, uint8_t *destAddr){
 	int ret = 0;
-	struct mac_mrf24j40_write_param write_param;
-	int len;
+	int len, i;
 	struct network_packet *pkt;
 	struct network_args_join_res *res;
 	uint8_t buff[32];
 	uint32_t u32Val;
+	struct rf_mac_write_packet *write_mac;
 
-	write_param.flags.bits.packetType 	= MAC_MRF24J40_PACKET_TYPE_DATA;
-	write_param.flags.bits.broadcast	= 0;
-	write_param.flags.bits.ackReq		= 0;
-	write_param.flags.bits.secEn		= 0;
-	write_param.flags.bits.intraPAN		= 0;
-	write_param.destPANId 				= 0xFFFF;
-	write_param.destAddress 			= destAddr;
-	write_param.srcAddressMode			= mac_iee802154_addrmode_16bit;
-	write_param.destAddressMode			= mac_iee802154_addrmode_64bit;
+	write_mac = (struct rf_mac_write_packet *)buff;
+	pkt = (struct network_packet*)write_mac->data;
+    res = (struct network_args_join_res*)pkt->args;
 
-	pkt = (struct network_packet*)buff;
-	res = (struct network_args_join_res*)pkt->args;
+    write_mac->header.flags.bits.ack_req          = 0;
+    write_mac->header.flags.bits.broadcast        = 0;
+    write_mac->header.flags.bits.intra_pan        = 0;
+    write_mac->header.flags.bits.dest_addr_64bit  = 0;
+    write_mac->header.flags.bits.src_addr_64bit   = 1;
+    SET_RF_MAC_WRITE_DEST_PAN(&write_mac->header, 0xFFFF);
+    for(i = 0; i < 8; i++)
+        write_mac->header.dest_addr[i] = destAddr[i];
+
 	pkt->hops = 1;
 	pkt->type = network_packet_type_join_res;
 	u32Val = rand();
 	res->address = u32Val & 0xFFFF;
-	len = sizeof(struct network_packet) - 1 + sizeof(struct network_args_join_res);
+	write_mac->data_len = sizeof(struct network_packet) - 1 + sizeof(struct network_args_join_res);
 
 	NWK_LREP("assign node: %04X\r\n", res->address);
 
-	MAC_mrf24j40_write(nwk->mac, &write_param, pkt, len);
+	ioctl(nwk->mac_fd, RF_MAC_IOC_WR_PACKET, write_mac);
 	return ret;
 }
-int Network_echo_respond(struct network *nwk, struct network_packet* pkt, int len, struct mac_mrf24j40_read_param *read_param){
+int Network_echo_respond(struct network *nwk, struct network_packet* pkt, int len, struct rf_mac_read_packet *read_param){
 	int ret = 0;
-	struct mac_mrf24j40_write_param write_param;
 	struct network_packet *res_pkt;
 	struct network_args_echo_res *res;
 	struct network_args_echo_req *req;
-	uint8_t buff[144];
+	uint8_t buff[144], io_buf[8];
+	struct rf_mac_write_packet *write_mac;
 
-	write_param.flags.bits.packetType 	= MAC_MRF24J40_PACKET_TYPE_DATA;
-	write_param.flags.bits.broadcast	= 0;
-	write_param.flags.bits.ackReq		= 0;
-	write_param.flags.bits.secEn		= 0;
-	write_param.flags.bits.intraPAN		= 1;
-	write_param.destPANId 				= (((uint16_t)nwk->mac->phy.pan_id[0]) & 0x00FF) | ((((uint16_t)nwk->mac->phy.pan_id[1]) << 8) & 0xFF00);
-	write_param.destAddress 			= read_param->srcAddr;
-	write_param.srcAddressMode			= mac_iee802154_addrmode_16bit;
-	write_param.destAddressMode			= mac_iee802154_addrmode_16bit;
+    write_mac = (struct rf_mac_write_packet *)buff;
+    res_pkt = (struct network_packet*)write_mac->data;
+    res = (struct network_args_echo_res*)res_pkt->args;
 
-	res_pkt = (struct network_packet*)buff;
-	res = (struct network_args_echo_res*)res_pkt->args;
+    write_mac->header.flags.bits.ack_req          = 0;
+    write_mac->header.flags.bits.broadcast        = 0;
+    write_mac->header.flags.bits.intra_pan        = 1;
+    write_mac->header.flags.bits.dest_addr_64bit  = 0;
+    write_mac->header.flags.bits.src_addr_64bit   = 0;
+    ioctl(nwk->mac_fd, RF_MAC_IOC_RD_PAN_ID, io_buf);
+    write_mac->header.dest_pan_id[0] = io_buf[0];
+    write_mac->header.dest_pan_id[1] = io_buf[1];
+    write_mac->header.dest_addr[0] = read_param->header.dest_addr[0];
+    write_mac->header.dest_addr[1] = read_param->header.dest_addr[1];
+
 	res_pkt->hops = 1;
 	res_pkt->type = network_packet_type_echo_res;
 
@@ -353,14 +384,14 @@ int Network_echo_respond(struct network *nwk, struct network_packet* pkt, int le
 #else
 		memcpy(res->data, req->data, req->length);
 #endif
-		len = sizeof(struct network_packet) - 1 + sizeof(struct network_args_echo_res);
+		write_mac->data_len = sizeof(struct network_packet) - 1 + sizeof(struct network_args_echo_res);
 		res->length = req->length;
 
-		MAC_mrf24j40_write(nwk->mac, &write_param, res_pkt, len);
+		ioctl(nwk->mac_fd, RF_MAC_IOC_WR_PACKET, write_mac);
 	}
 	return ret;
 }
-int Network_process_packet(struct network *nwk, struct network_packet* pkt, int len, struct mac_mrf24j40_read_param *read_param){
+int Network_process_packet(struct network *nwk, struct network_packet* pkt, int len, struct rf_mac_read_packet *read_param){
 	int ret = 0;
 	int processed = 0;
 
@@ -369,16 +400,16 @@ int Network_process_packet(struct network *nwk, struct network_packet* pkt, int 
 			case network_packet_type_beacon_req:{
 				// request a beacon
 				NWK_LREP("recv[rssi:%02X, lqi:%02X] a beacon request from %02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X, send back a respond\r\n",
-						read_param->rssi, read_param->lqi,
-						(uint8_t)((read_param->srcAddr >> 0) & 0x00FF),
-						(uint8_t)((read_param->srcAddr >> 8 * 1) & 0x00FF),
-						(uint8_t)((read_param->srcAddr >> 8 * 2) & 0x00FF),
-						(uint8_t)((read_param->srcAddr >> 8 * 3) & 0x00FF),
-						(uint8_t)((read_param->srcAddr >> 8 * 4) & 0x00FF),
-						(uint8_t)((read_param->srcAddr >> 8 * 5) & 0x00FF),
-						(uint8_t)((read_param->srcAddr >> 8 * 6) & 0x00FF),
-						(uint8_t)((read_param->srcAddr >> 8 * 7) & 0x00FF));
-				Network_beacon_respond(nwk, read_param->srcAddr);
+						read_param->header.rssi, read_param->header.lqi,
+						(uint8_t)(read_param->header.src_addr[0]),
+						(uint8_t)(read_param->header.src_addr[1]),
+						(uint8_t)(read_param->header.src_addr[2]),
+						(uint8_t)(read_param->header.src_addr[3]),
+						(uint8_t)(read_param->header.src_addr[4]),
+						(uint8_t)(read_param->header.src_addr[5]),
+						(uint8_t)(read_param->header.src_addr[6]),
+						(uint8_t)(read_param->header.src_addr[7]));
+				Network_beacon_respond(nwk, read_param->header.src_addr);
 				processed = 1;
 				break;
 			}
@@ -393,8 +424,8 @@ int Network_process_packet(struct network *nwk, struct network_packet* pkt, int 
 			}
 			case network_packet_type_join_done:{
 				struct network_args_join_done* done = (struct network_args_join_done*)pkt->args;
-				NWK_LREP("recv join done from %04X, add to list child ...", ((uint16_t)read_param->srcAddr));
-				if(Network_add_child(nwk, done->long_address, read_param->srcAddr)) LREP("FAIL\r\n");
+				NWK_LREP("recv join done from %04X, add to list child ...", GET_RF_MAC_READ_SRC_ADDR_SHORT(&read_param->header));
+				if(Network_add_child(nwk, done->long_address, GET_RF_MAC_READ_SRC_ADDR_SHORT(&read_param->header))) LREP("FAIL\r\n");
 				else LREP("done\r\n");
 				processed = 1;
 				break;
@@ -406,16 +437,16 @@ int Network_process_packet(struct network *nwk, struct network_packet* pkt, int 
 				case network_packet_type_join_req:{
 					// request to join
 					NWK_LREP("recv[rssi:%02X, lqi:%02X] a join request from %02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X\r\n",
-							read_param->rssi, read_param->lqi,
-							(uint8_t)((read_param->srcAddr >> 0) & 0x00FF),
-							(uint8_t)((read_param->srcAddr >> 8 * 1) & 0x00FF),
-							(uint8_t)((read_param->srcAddr >> 8 * 2) & 0x00FF),
-							(uint8_t)((read_param->srcAddr >> 8 * 3) & 0x00FF),
-							(uint8_t)((read_param->srcAddr >> 8 * 4) & 0x00FF),
-							(uint8_t)((read_param->srcAddr >> 8 * 5) & 0x00FF),
-							(uint8_t)((read_param->srcAddr >> 8 * 6) & 0x00FF),
-							(uint8_t)((read_param->srcAddr >> 8 * 7) & 0x00FF));
-					Network_join_respond(nwk, read_param->srcAddr);
+							read_param->header.rssi, read_param->header.lqi,
+							(uint8_t)(read_param->header.src_addr[0]),
+                            (uint8_t)(read_param->header.src_addr[1]),
+                            (uint8_t)(read_param->header.src_addr[2]),
+                            (uint8_t)(read_param->header.src_addr[3]),
+                            (uint8_t)(read_param->header.src_addr[4]),
+                            (uint8_t)(read_param->header.src_addr[5]),
+                            (uint8_t)(read_param->header.src_addr[6]),
+                            (uint8_t)(read_param->header.src_addr[7]));
+					Network_join_respond(nwk, read_param->header.src_addr);
 					processed = 1;
 					break;
 				}
@@ -431,42 +462,57 @@ int Network_process_packet(struct network *nwk, struct network_packet* pkt, int 
 }
 int Network_loop(struct network *nwk, int timeout){
 	int ret = 0, ival;
-    struct mac_mrf24j40_read_param read_param;
     char buff[144];
+    struct rf_mac_read_packet  *read_mac;
+    struct pollfd poll_fd[1];
+
+    read_mac = (struct rf_mac_read_packet *)buff;
     if(nwk->lock == 0){
-    	ival = MAC_mrf24j40_read(nwk->mac, &read_param, buff, 144, timeout);
-    	ret = Network_process_packet(nwk, (struct network_packet*)buff, ival, &read_param);
+        poll_fd[0].fd = nwk->mac_fd;
+        poll_fd[0].events = POLLIN;
+        poll_fd[0].revents = 0;
+        ival = poll(poll_fd, 1, timeout);
+        read_mac->data_len = 0;
+        if(ival > 0 && (poll_fd[0].revents & POLLIN)){
+            ival = ioctl(nwk->mac_fd, RF_MAC_IOC_RD_PACKET, read_mac);
+        }
+    	ret = Network_process_packet(nwk, (struct network_packet*)buff, ival, read_mac);
     }else usleep(1000*100);
 	return ret;
 }
 int Network_echo_request(struct network *nwk, uint16_t address, int count, int datalen, struct network_echo_info* info, int not_wait_res){
 	int ret = -1, i;
-	struct mac_mrf24j40_write_param write_param;
 	int len;
 	struct network_packet *pkt;
 	struct network_args_echo_req* req;
 	struct network_args_echo_res* res;
-	struct mac_mrf24j40_read_param read_param;
 	struct network_packet* nwk_packet;
-	uint8_t tx[144], rx[144];
+	uint8_t tx[144], rx[144], io_buf[8];
 	int timeout = 200;
 	struct timespec t_now, t_ref;
 	int failed_cnt = 0;
     int timeout_cnt;
+    struct rf_mac_read_packet   *read_mac;
+    struct rf_mac_write_packet  *write_mac;
+    struct pollfd poll_fd[1];
 
-	write_param.flags.bits.packetType 	= MAC_MRF24J40_PACKET_TYPE_DATA;
-	write_param.flags.bits.broadcast	= 0;
-	write_param.flags.bits.ackReq		= 0;
-	write_param.flags.bits.secEn		= 0;
-	write_param.flags.bits.intraPAN		= 0;
-	write_param.destPANId 				= (((uint16_t)nwk->mac->phy.pan_id[0]) & 0x00FF) | ((((uint16_t)nwk->mac->phy.pan_id[1]) << 8) & 0xFF00);
-	write_param.destAddress 			= address;
-	write_param.srcAddressMode			= mac_iee802154_addrmode_16bit;
-	write_param.destAddressMode			= mac_iee802154_addrmode_16bit;
+    read_mac = (struct rf_mac_read_packet*)rx;
+    write_mac = (struct rf_mac_write_packet*)tx;
 
-	pkt = (struct network_packet*)tx;
+    write_mac->header.flags.bits.ack_req          = 0;
+    write_mac->header.flags.bits.broadcast        = 0;
+    write_mac->header.flags.bits.intra_pan        = 0;
+    write_mac->header.flags.bits.dest_addr_64bit  = 0;
+    write_mac->header.flags.bits.src_addr_64bit   = 0;
+    ioctl(nwk->mac_fd, RF_MAC_IOC_RD_PAN_ID, io_buf);
+    write_mac->header.dest_pan_id[0] = io_buf[0];
+    write_mac->header.dest_pan_id[1] = io_buf[1];
+    SET_RF_MAC_WRITE_DEST_ADDR_SHORT(&write_mac->header, address);
+
+
+	pkt = (struct network_packet*)write_mac->data;
 	req = (struct network_args_echo_req*)pkt->args;
-	nwk_packet = (struct network_packet*)rx;
+	nwk_packet = (struct network_packet*)read_mac->data;
 	res = (struct network_args_echo_res*)nwk_packet->args;
 
 	pkt->hops = 1;
@@ -483,26 +529,34 @@ int Network_echo_request(struct network *nwk, uint16_t address, int count, int d
 
 	nwk->lock 		= 1;
 	usleep(1000* 200);
-	MAC_mrf24j40_ioctl(nwk->mac, mac_mrf24j40_ioc_reset, 0);
+	ioctl(nwk->mac_fd, RF_MAC_IOC_WR_RESET, 0);
 	clock_gettime(CLOCK_REALTIME, &t_ref);
 	while(count -- && kb_value() != 0x03){
 		failed_cnt++;
 		for(i = 0; i < datalen; i++)
 			req->data[i] = rand();
-		len = sizeof(struct network_packet) - 1 + sizeof(struct network_args_echo_req);
+		write_mac->data_len = sizeof(struct network_packet) - 1 + sizeof(struct network_args_echo_req);
 
-		if(MAC_wait_ready_to_write(nwk->mac, 100) != 1){
-			info->timeout++;
-		}
-		else{
-			MAC_mrf24j40_write(nwk->mac, &write_param, pkt, len);
+        poll_fd[0].fd = nwk->mac_fd;
+        poll_fd[0].events = POLLOUT;
+        poll_fd[0].revents = 0;
+        ret = poll(poll_fd, 1, timeout);
+        if(ret > 0 && (poll_fd[0].revents & POLLOUT)){
+            ioctl(nwk->mac_fd, RF_MAC_IOC_WR_PACKET, write_mac);
 			if(not_wait_res == 0){
 				len = 0;
 				timeout_cnt = 2;
 				do{
-					len = MAC_mrf24j40_read(nwk->mac, &read_param, rx, 144, timeout);
-				}while(len == 0 && timeout_cnt --);
-				if(len >= sizeof(struct network_packet)-1){
+				    poll_fd[0].fd = nwk->mac_fd;
+                    poll_fd[0].events = POLLIN;
+                    poll_fd[0].revents = 0;
+                    ret = poll(poll_fd, 1, timeout);
+                    read_mac->data_len = 0;
+                    if(ret > 0 && (poll_fd[0].revents & POLLIN)){
+                        ret = ioctl(nwk->mac_fd, RF_MAC_IOC_RD_PACKET, read_mac);
+                    }
+				}while(read_mac->data_len == 0 && timeout_cnt --);
+				if(read_mac->data_len >= sizeof(struct network_packet)-1){
 					if(nwk_packet->type == network_packet_type_echo_res){
 						i = 0;
 	#if 0
@@ -529,7 +583,7 @@ int Network_echo_request(struct network *nwk, uint16_t address, int count, int d
 					}else{
 						NWK_LREP_WARN("[%d]packet type %02X not echo-res\r\n", count, nwk_packet->type);
 						info->timeout++;
-						Network_process_packet(nwk, nwk_packet, len, &read_param);
+						Network_process_packet(nwk, nwk_packet, len, read_mac);
 					}
 				}else{
 					//NWK_LREP_WARN("[%d]packet invalid length %u\r\n", count, len);
@@ -539,6 +593,8 @@ int Network_echo_request(struct network *nwk, uint16_t address, int count, int d
 				info->passed ++;
 				failed_cnt = 0;
 			}
+		}else{
+		    info->timeout++;
 		}
 		if(failed_cnt > 10) break;
 	}

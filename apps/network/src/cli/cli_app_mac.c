@@ -11,8 +11,7 @@
 #include <string.h>
 #include <Network.h>
 const char cli_app_mac_description[] = "MAC layer tools";
-extern struct mac_mrf24j40         	g_rf_mac;
-
+extern struct network                   g_nwk;
 int cli_app_mac_callback(int argc, char** argv, void* user);
 struct cli_app_info g_cli_app_mac = {
 	.cmd = "mac",
@@ -38,7 +37,9 @@ int cli_app_mac_callback(int argc, char** argv, void* user){
 			LREP("\r\nsend and verify packets\r\n");
 			MAC_test_send_and_check_packets();
 		}else if(strcmp(argv[1], "channel") == 0){
-			LREP("\r\n%u\r\n", g_rf_mac.phy.channel);
+		    unsigned int ch = 0;
+		    ioctl(g_nwk.mac_fd, RF_MAC_IOC_RD_CHANNEL, &ch);
+			LREP("\r\n%u\r\n", ch);
 		}
 
 	}else cli_app_mac_help();

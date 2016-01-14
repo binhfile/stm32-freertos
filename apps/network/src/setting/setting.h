@@ -10,7 +10,7 @@
 #include <stdint.h>
 #include <at93c.h>
 struct setting_device{
-	struct at93c_device dev;
+	int eeprom_fd;
 };
 #define setting_value_magic_id	0x16
 enum setting_network_type{

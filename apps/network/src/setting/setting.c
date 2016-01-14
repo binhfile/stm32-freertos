@@ -93,10 +93,14 @@ uint8_t hex_to_dec(uint8_t hex){
 //	}
 //}
 int setting_read(struct setting_device* dev, struct setting_value* val){
-	return at93c_read(&g_setting_dev.dev, 0, val, sizeof(struct setting_value));
+
+    lseek(dev->eeprom_fd, 0, SEEK_SET);
+    return read(dev->eeprom_fd, val, sizeof(struct setting_value));
+
 }
 int setting_write(struct setting_device* dev, struct setting_value* val){
-	return at93c_write(&g_setting_dev.dev, 0, val, sizeof(struct setting_value));
+    lseek(dev->eeprom_fd, 0, SEEK_SET);
+    return write(dev->eeprom_fd, val, sizeof(struct setting_value));
 }
 
 // end of file

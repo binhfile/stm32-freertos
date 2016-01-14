@@ -9,52 +9,62 @@
 #include "Test.h"
 #include <debug.h>
 #include <unistd.h>
-#include "network/mac/mac_mrf24j40.h"
 #include <Network.h>
 #include <setting.h>
 #include <string.h>
 #include <fcntl.h>
+#include <time.h>
 #define TEST_LEN	(90)
 
-extern struct mac_mrf24j40	g_rf_mac;
+extern struct network           g_nwk;
 extern struct setting_device	g_setting_dev;
 
 void MAC_test_loop_received_packets(){
 	uint8_t rxBuf[TEST_LEN];
+	uint8_t txBuf[TEST_LEN];
 	int i, len;
 	unsigned int uival;
-	struct mac_mrf24j40_write_param write_param;
-	struct mac_mrf24j40_read_param read_param;
 	struct setting_value setting;
+    struct rf_mac_read_packet   *read_mac;
+    struct rf_mac_write_packet  *write_mac;
+    struct pollfd poll_fd[1];
 
-	write_param.flags.bits.packetType 	= MAC_MRF24J40_PACKET_TYPE_DATA;
-	write_param.flags.bits.broadcast	= 1;
-	write_param.flags.bits.ackReq		= 0;
-	write_param.flags.bits.sourcePrsnt	= 0;
-	write_param.flags.bits.repeat		= 0;
-	write_param.flags.bits.secEn		= 0;
-	write_param.flags.bits.intraPAN		= 1;
-	write_param.destPANId 				= 0xffff;
-	write_param.destAddress 			= 0xffff;
-	write_param.srcAddressMode			= mac_iee802154_addrmode_64bit;
-	write_param.destAddressMode			= mac_iee802154_addrmode_16bit;
+    read_mac = (struct rf_mac_read_packet*)rxBuf;
+    write_mac = (struct rf_mac_write_packet*)txBuf;
+
+    write_mac->header.flags.bits.ack_req          = 0;
+    write_mac->header.flags.bits.broadcast        = 1;
+    write_mac->header.flags.bits.intra_pan        = 1;
+    write_mac->header.flags.bits.dest_addr_64bit  = 0;
+    write_mac->header.flags.bits.src_addr_64bit   = 1;
+    SET_RF_MAC_WRITE_DEST_PAN(&write_mac->header, 0xffff)
+    SET_RF_MAC_WRITE_DEST_ADDR_SHORT(&write_mac->header, 0xffff);
 
 	setting_read(&g_setting_dev, &setting);
 	uival = 25;
-	MAC_mrf24j40_ioctl(&g_rf_mac, mac_mrf24j40_ioc_set_channel, (unsigned int)&uival);
+	ioctl(g_nwk.mac_fd, RF_MAC_IOC_WR_CHANNEL, &uival);
 	for(i = 0; i < 8 ; i++)
 		rxBuf[i] = setting.mac_long_address[i];
-	MAC_mrf24j40_ioctl(&g_rf_mac, mac_mrf24j40_ioc_set_long_address, (unsigned int)rxBuf);
+	ioctl(g_nwk.mac_fd, RF_MAC_IOC_WR_LONG_ADDRESS, rxBuf);
 
 	//LREP("Begin loop packets\r\n");
 	while(kb_value() != 's'){
-		len = MAC_mrf24j40_read(&g_rf_mac, &read_param, rxBuf, TEST_LEN, 1000);
-		if(len <= 0){
+	    poll_fd[0].fd = g_nwk.mac_fd;
+        poll_fd[0].events = POLLIN;
+        poll_fd[0].revents = 0;
+        len = poll(poll_fd, 1, 1000);
+        read_mac->data_len = 0;
+        if(len > 0 && (poll_fd[0].revents & POLLIN)){
+            len = ioctl(g_nwk.mac_fd, RF_MAC_IOC_RD_PACKET, read_mac);
+        }
+		if(read_mac->data_len <= 0){
 		}else{
-			for(i = 0; i < TEST_LEN; i++){
-				rxBuf[i]++;
+			for(i = 0; i < read_mac->data_len; i++){
+			    read_mac->data[i]++;
 			}
-			MAC_mrf24j40_write(&g_rf_mac, &write_param, rxBuf, TEST_LEN);
+			memcpy(write_mac->data, read_mac->data, read_mac->data_len);
+			write_mac->data_len = read_mac->data_len;
+			ioctl(g_nwk.mac_fd, RF_MAC_IOC_WR_PACKET, write_mac);
 			LED_TOGGLE(BLUE);
 		}
 	}
@@ -65,45 +75,54 @@ void MAC_test_send_and_check_packets(){
 	uint8_t* pu8;
 	unsigned int uival;
 	int i, len, t_diff, payload_cnt = 0, packet_done_cnt = 0, packet_err_cnt = 0, packet_timeout_cnt = 0;
-	struct mac_mrf24j40_write_param write_param;
-	struct mac_mrf24j40_read_param read_param;
 	struct timespec t_ref, t_now;
 	struct setting_value setting;
+    struct rf_mac_read_packet   *read_mac;
+    struct rf_mac_write_packet  *write_mac;
+    struct pollfd poll_fd[1];
 
-	write_param.flags.bits.packetType 	= MAC_MRF24J40_PACKET_TYPE_DATA;
-	write_param.flags.bits.broadcast	= 1;
-	write_param.flags.bits.ackReq		= 0;
-	write_param.flags.bits.sourcePrsnt	= 0;
-	write_param.flags.bits.repeat		= 0;
-	write_param.flags.bits.secEn		= 0;
-	write_param.flags.bits.intraPAN		= 1;
-	write_param.destPANId 				= 0xFFFF;
-	write_param.destAddress 			= 0xFFFFFFFFFFFFFFFF;
-	write_param.srcAddressMode			= mac_iee802154_addrmode_64bit;
-	write_param.destAddressMode			= mac_iee802154_addrmode_16bit;
+    read_mac = (struct rf_mac_read_packet*)rxBuf;
+    write_mac = (struct rf_mac_write_packet*)txBuf;
+
+    write_mac->header.flags.bits.ack_req          = 0;
+    write_mac->header.flags.bits.broadcast        = 1;
+    write_mac->header.flags.bits.intra_pan        = 1;
+    write_mac->header.flags.bits.dest_addr_64bit  = 0;
+    write_mac->header.flags.bits.src_addr_64bit   = 1;
+    SET_RF_MAC_WRITE_DEST_PAN(&write_mac->header, 0xffff)
+    SET_RF_MAC_WRITE_DEST_ADDR_SHORT(&write_mac->header, 0xffff);
 
 	setting_read(&g_setting_dev, &setting);
 	uival = 25;
-	MAC_mrf24j40_ioctl(&g_rf_mac, mac_mrf24j40_ioc_set_channel, (unsigned int)&uival);
+	ioctl(g_nwk.mac_fd, RF_MAC_IOC_WR_CHANNEL, &uival);
 	for(i = 0; i < 8 ; i++)
 		rxBuf[i] = setting.mac_long_address[i];
-	MAC_mrf24j40_ioctl(&g_rf_mac, mac_mrf24j40_ioc_set_long_address, (unsigned int)rxBuf);
+	ioctl(g_nwk.mac_fd, RF_MAC_IOC_WR_LONG_ADDRESS, rxBuf);
 
 	//LREP("Begin send packets\r\n");
 	clock_gettime(CLOCK_REALTIME, &t_ref);
 	while(kb_value() != 's'){
 		for(i = 0; i < TEST_LEN; i++){
-			txBuf[i] = cnt++;
+		    write_mac->data[i] = cnt++;
 		}
-		MAC_mrf24j40_write(&g_rf_mac, &write_param, txBuf, TEST_LEN);
-		len = MAC_mrf24j40_read(&g_rf_mac, &read_param, rxBuf, TEST_LEN, 1000);
-		if(len <= 0){
+		write_mac->data_len = TEST_LEN;
+		ioctl(g_nwk.mac_fd, RF_MAC_IOC_WR_PACKET, write_mac);
+
+		poll_fd[0].fd = g_nwk.mac_fd;
+        poll_fd[0].events = POLLIN;
+        poll_fd[0].revents = 0;
+        len = poll(poll_fd, 1, 1000);
+        read_mac->data_len = 0;
+        if(len > 0 && (poll_fd[0].revents & POLLIN)){
+            len = ioctl(g_nwk.mac_fd, RF_MAC_IOC_RD_PACKET, read_mac);
+        }
+		if(read_mac->data_len <= 0){
 			LREP("timeout\r\n");
 			packet_timeout_cnt++;
 		}else{
 			for(i = 0; i < TEST_LEN; i++){
-				txBuf[i]++;
-				if(rxBuf[i] != txBuf[i]){
+			    write_mac->data[i]++;
+				if(read_mac->data[i] != write_mac->data[i]){
 					break;
 				}
 			}
@@ -131,36 +150,38 @@ void MAC_test_send_and_check_packets(){
 	LREP("Speed:              %d.%d KB/s\r\n", payload_cnt / t_diff * 1000 / 1024,
 			(payload_cnt / t_diff * 1000 - (payload_cnt / t_diff * 1000 / 1024)*1024)*10/1024);
 	LREP("Partner: ");
-	pu8 = (uint8_t*)&read_param.srcAddr;
-	for(i = 0; i < 7; i++) LREP("%02X:", pu8[i]);
-	LREP("%02X", pu8[i]);
-	LREP("@%02X%02X\r\n",
-			((uint8_t)((read_param.srcPANid & 0xFF00) >> 8)),
-			((uint8_t)(read_param.srcPANid & 0x00FF)));
+	for(i = 0; i < 7; i++) LREP("%02X:", read_mac->header.src_addr[i]);
+	LREP("%02X", read_mac->header.src_addr[i]);
+	LREP("@%02X%02X\r\n",read_mac->header.dest_pan_id[1], read_mac->header.dest_pan_id[0]);
 }
 void Setting_test_erase_and_write(){
-	uint8_t buf[AT93C66_SIZE], wBuf[AT93C66_SIZE];
+	uint8_t buf[512], wBuf[512];
 	int i;
 	LREP("Erase eeprom ...");
-	at93c_ioctl(&g_setting_dev.dev, at93c_ioc_erase_all, 0);
-	at93c_read(&g_setting_dev.dev, 0, buf, AT93C66_SIZE);
-	for(i = 0; i < AT93C66_SIZE; i++){
+
+	ioctl(g_setting_dev.eeprom_fd, AT93C_IOC_WR_ERASE_ALL, 0);
+	lseek(g_setting_dev.eeprom_fd, 0 , SEEK_SET);
+	read(g_setting_dev.eeprom_fd, buf, 512);
+
+	for(i = 0; i < 512; i++){
 		if(buf[i] != 0xFF) break;
 	}
-	if(i == AT93C66_SIZE) LREP("DONE\r\n");
+	if(i == 512) LREP("DONE\r\n");
 	else LREP("FALSE\r\n");
 
-	for(i = 0; i < AT93C66_SIZE; i++){
+	for(i = 0; i < 512; i++){
 		wBuf[i] = i;
 		buf[i] = 0;
 	}
 	LREP("Write pattern and verify ...");
-	at93c_write(&g_setting_dev.dev, 0, wBuf, AT93C66_SIZE);
-	at93c_read(&g_setting_dev.dev, 0, buf, AT93C66_SIZE);
-	for(i = 0; i < AT93C66_SIZE; i++){
+	lseek(g_setting_dev.eeprom_fd, 0 , SEEK_SET);
+	write(g_setting_dev.eeprom_fd, wBuf, 512);
+	lseek(g_setting_dev.eeprom_fd, 0 , SEEK_SET);
+	read(g_setting_dev.eeprom_fd, buf, 512);
+	for(i = 0; i < 512; i++){
 		if(buf[i] != wBuf[i]) break;
 	}
-	if(i == AT93C66_SIZE) LREP("DONE\r\n");
+	if(i == 512) LREP("DONE\r\n");
 	else LREP("FALSE\r\n");
 
 }

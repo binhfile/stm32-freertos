@@ -10,9 +10,28 @@
 
 #include <stdint.h>
 #include <semaphore.h>
-#include "network/mac/mac_mrf24j40.h"
 #include <project_config.h>
+#include "rf_mac.h"
 
+#define SET_RF_MAC_WRITE_DEST_PAN(h, id)    {\
+    (h)->dest_pan_id[1] = ((((uint16_t)id) >> 8) & 0xFF);\
+    (h)->dest_pan_id[0] = (((uint16_t)id) & 0xFF);\
+}
+#define SET_RF_MAC_WRITE_DEST_ADDR_SHORT(h, addr)    {\
+    (h)->dest_addr[1] = ((((uint16_t)addr) >> 8) & 0xFF);\
+    (h)->dest_addr[0] = (((uint16_t)addr) & 0xFF);\
+}
+#define SET_RF_MAC_WRITE_DEST_ADDR_LONG(h, addr)    {\
+    (h)->dest_addr[7] = ((((uint64_t)addr) >> (8*7)) & 0xFF);\
+    (h)->dest_addr[6] = ((((uint64_t)addr) >> (8*6)) & 0xFF);\
+    (h)->dest_addr[5] = ((((uint64_t)addr) >> (8*5)) & 0xFF);\
+    (h)->dest_addr[4] = ((((uint64_t)addr) >> (8*4)) & 0xFF);\
+    (h)->dest_addr[3] = ((((uint64_t)addr) >> (8*3)) & 0xFF);\
+    (h)->dest_addr[2] = ((((uint64_t)addr) >> (8*2)) & 0xFF);\
+    (h)->dest_addr[1] = ((((uint64_t)addr) >> 8) & 0xFF);\
+    (h)->dest_addr[0] = ((((uint64_t)addr)) & 0xFF);\
+}
+#define GET_RF_MAC_READ_SRC_ADDR_SHORT(h)   ((((uint16_t)((h)->src_addr[0])) & 0x00FF) | ((((uint16_t)((h)->src_addr[1])) << 8) & 0x00FF))
 #define NWK_LOOK(nwk) (nwk)->lock = 1
 #define NWK_UNLOOK(nwk) (nwk)->lock = 0
 enum network_packet_type{
@@ -43,7 +62,7 @@ struct nwk_child_info{
 	uint16_t id;
 };
 struct network{
-	struct mac_mrf24j40 *mac;
+	int mac_fd;
 	int lock;
 
 	uint16_t parent_id;
@@ -93,8 +112,8 @@ struct  __attribute__((packed)) network_args_echo_res{
 };
 
 
-int Network_init(struct network *nwk);
-int Network_scan_channel(struct mac_mrf24j40 *mac, uint32_t channels, uint8_t * noise_level);
+int Network_init(struct network *nwk, int mac_fd);
+int Network_scan_channel(struct network *nwk, uint32_t channels, uint8_t * noise_level);
 
 int Network_beacon_request(struct network *nwk);
 int Network_detect_current_network(struct network *nwk, unsigned int channel, struct network_beacon_info *info, int info_max_count);

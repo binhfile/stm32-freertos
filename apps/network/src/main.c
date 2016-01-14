@@ -21,9 +21,10 @@
 #include <cli.h>
 #include <debug.h>
 
+#include "rf_mac.h"
+#include "at93c.h"
+
 void *Thread_UserInput(void*);
-void *Thread_PhyIntr(void*);
-void *Thread_MiwiTask(void*);
 
 int                 g_fd_led[4]         = {-1};
 int                 g_fd_button         = -1;
@@ -43,7 +44,7 @@ void *Thread_DebugTX(void*);
 }
 #elif defined(OS_LINUX)
 #include <stdio.h>
-#define             APP_THREAD_COUNT    	3
+#define             APP_THREAD_COUNT    	2
 #define DEFINE_THREAD(fxn, stack_size, priority) \
 	pthread_t thread_##fxn;\
 	{\
@@ -51,13 +52,12 @@ void *Thread_DebugTX(void*);
 }
 #endif
 
-sem_t               g_sem_debug;
-sem_t				g_sem_debug_rx;
-int                 g_fd_debug_tx          	= -1;
-int                 g_fd_debug_rx          	= -1;
+sem_t   g_sem_debug;
+sem_t	g_sem_debug_rx;
+int     g_fd_debug_tx          	= -1;
+int     g_fd_debug_rx          	= -1;
+int     g_fd_rf_mac             = -1;
 
-struct mac_mrf24j40_open_param  g_rf_mac_open;
-struct mac_mrf24j40         	g_rf_mac;
 struct network					g_nwk;
 struct setting_device       	g_setting_dev;
 struct setting_value			g_setting;
@@ -152,146 +152,33 @@ int main(void)
 	opt.c_lflag &= ~(ICANON | ECHO);
 	ioctl(g_fd_debug_rx, TCSETS2, &opt);
 
-	/*
-	 * rf-reset 	- 17
-	 * rf-intr  	- 13
-	 *
-	 * eeprom-cs	- 22
-	 * eeprom-sck	- 23
-	 * eeprom-mosi	- 24
-	 * eeprom-miso	- 25
-	 */
-	struct gpio_info{
-			int num;
-			int dir;
-			int edge;
-	};
-	struct gpio_info gpios[] = {
-			{
-					.num = 17,
-					.dir = 0,
-			},// reset
-			{
-					.num = 27,
-					.dir = 1,
-					.edge = 1,
-			},// intr
-			{
-					.num = 22,
-					.dir = 0,
-			},// cs
-			{
-					.num = 23,
-					.dir = 0,
-			},// sck
-			{
-					.num = 24,
-					.dir = 0,
-			},// mosi
-			{
-					.num = 25,
-					.dir = 1,
-					.edge = 0,
-			},// miso
-			{
-					.num = 5,
-					.dir = 0,
-			},// led-1
-			{
-					.num = 6,
-					.dir = 0,
-			},// led-2
-			{
-					.num = 13,
-					.dir = 0,
-			},// led-3
-			{
-					.num = 19,
-					.dir = 0,
-			},// led-4
-			{
-					.num = 16,
-					.dir = 1,
-					.edge = 1,
-			},// button
-	};
-
-	int fd;
-	char buffer[64];
-	for(i = 0; i < sizeof(gpios) / sizeof(struct gpio_info); i++){
-		fd = open("/sys/class/gpio/export", O_WRONLY);
-		if(fd >= 0){
-			snprintf(buffer, 63, "%d", gpios[i].num);
-			write(fd, buffer, strlen(buffer));
-			close(fd);
-			snprintf(buffer, 63, "/sys/class/gpio/gpio%d/direction", gpios[i].num);
-			fd = open(buffer, O_WRONLY);
-			if(fd >= 0){
-				if(gpios[i].dir == 0)
-					snprintf(buffer, 63, "out");
-				else
-					snprintf(buffer, 63, "in");
-				write(fd, buffer, strlen(buffer));
-				close(fd);
-			}
-			if(gpios[i].dir == 1){
-				snprintf(buffer, 63, "/sys/class/gpio/gpio%d/edge", gpios[i].num);
-				fd = open(buffer, O_WRONLY);
-				if(fd >= 0){
-					if(gpios[i].edge == 1) snprintf(buffer, 63, "falling");
-					else if(gpios[i].edge == 2) snprintf(buffer, 63, "rising");
-					else snprintf(buffer, 63, "none");
-					write(fd, buffer, strlen(buffer));
-					close(fd);
-				}
-			}
-		}
-	}
-    g_rf_mac_open.fd_cs = -1;
-    g_rf_mac_open.fd_reset = open("/sys/class/gpio/gpio17/value", O_WRONLY);
-    if(g_rf_mac_open.fd_reset < 0) LREP("open rf-reset device failed\r\n");
-    g_rf_mac_open.fd_intr = open("/sys/class/gpio/gpio27/value", O_RDONLY);
-    if(g_rf_mac_open.fd_intr < 0) LREP("open rf-intr device failed\r\n");
-    g_rf_mac_open.fd_spi = open("/dev/spidev0.0", O_RDWR);
-    g_setting_dev.dev.fd_cs   = open("/sys/class/gpio/gpio22/value", O_WRONLY);
-    g_setting_dev.dev.fd_sck  = open("/sys/class/gpio/gpio23/value", O_WRONLY);
-    g_setting_dev.dev.fd_mosi = open("/sys/class/gpio/gpio24/value", O_WRONLY);
-    g_setting_dev.dev.fd_miso =  open("/sys/class/gpio/gpio25/value", O_RDONLY);
-
-    g_fd_led[0] = open("/sys/class/gpio/gpio5/value", O_RDWR);
+	g_fd_led[0] = open("/sys/class/gpio/gpio5/value", O_RDWR);
     g_fd_led[1] = open("/sys/class/gpio/gpio6/value", O_RDWR);
     g_fd_led[2] = open("/sys/class/gpio/gpio13/value", O_RDWR);
     g_fd_led[3] = open("/sys/class/gpio/gpio19/value", O_RDWR);
 //    g_fd_button = open("/sys/class/gpio/gpio26/value", O_RDONLY);
+
+    g_fd_rf_mac = open("/dev/mrf24j40", O_RDWR);
+    if(g_fd_rf_mac < 0){
+        LREP_WARN("open rf device failed\r\n");
+    }
+    g_setting_dev.eeprom_fd = open("/dev/at93c.0", O_RDWR);
+    if(g_setting_dev.eeprom_fd < 0){
+        LREP_WARN("open eeprom device failed\r\n");
+    }
 #endif
     LED_OFF(RED);
     LED_OFF(GREEN);
     LED_OFF(BLUE);
     LED_OFF(ORANGE);
-    if(g_rf_mac_open.fd_spi < 0){
-        LREP("open spi device '%s' failed %d\r\n", "/dev/spidev0.0", g_rf_mac_open.fd_spi);
-    }
-    else{
-        uival = SPI_MODE_0;
-        if(ioctl(g_rf_mac_open.fd_spi, SPI_IOC_WR_MODE, (unsigned int)&uival) != 0) LREP("ioctl spi mode failed\r\n");
-        uival = 15000000;
-        if(ioctl(g_rf_mac_open.fd_spi, SPI_IOC_WR_MAX_SPEED_HZ, (unsigned int)&uival) != 0) LREP("ioctl spi speed failed\r\n");
-        uival = 8;
-        if(ioctl(g_rf_mac_open.fd_spi, SPI_IOC_WR_BITS_PER_WORD, (unsigned int)&uival) != 0) LREP("ioctl bit per word failed\r\n");
-    }
 
-    g_nwk.mac = &g_rf_mac;
-    // Miwi network
-    MAC_mrf24j40_open(&g_rf_mac, &g_rf_mac_open);
-    Network_init(&g_nwk);
+    Network_init(&g_nwk, g_fd_rf_mac);
     srand(0);
 
 #if defined(OS_FREERTOS)
     DEFINE_THREAD(Thread_DebugTX,   1024, tskIDLE_PRIORITY + 1UL);
 #endif
     DEFINE_THREAD(Thread_UserInput, 2048, tskIDLE_PRIORITY + 3UL);
-    DEFINE_THREAD(Thread_MiwiTask,  2048, tskIDLE_PRIORITY + 4UL);
-    DEFINE_THREAD(Thread_PhyIntr,   2048, tskIDLE_PRIORITY + 1UL);
     usleep(1000* 100);
 
     LREP("\r\nHit any key to break boot sequence");
@@ -313,11 +200,10 @@ int main(void)
     LREP("Setting:\r\n");
     setting_dump_to_stdio(&g_setting);
     uival = 16;
-    MAC_mrf24j40_ioctl(&g_rf_mac, mac_mrf24j40_ioc_set_channel, (unsigned int)&uival);
+    ioctl(g_fd_rf_mac, RF_MAC_IOC_WR_CHANNEL, &uival);
     for(i = 0; i < 8 ; i++)
         u8aVal[i] = g_setting.mac_long_address[i];
-    MAC_mrf24j40_ioctl(&g_rf_mac, mac_mrf24j40_ioc_set_long_address, (unsigned int)u8aVal);
-
+    ioctl(g_fd_rf_mac, RF_MAC_IOC_WR_LONG_ADDRESS, u8aVal);
     // PAN Coordinator
     if(g_setting.network_type == setting_network_type_pan_coordinator){
         uint8_t channels[NWK_CHANNEL_CNT];
@@ -379,10 +265,10 @@ int main(void)
             uival = channels[i];
             LREP("Create network channel %d PANId %02X%02X\r\n", uival, u8aVal[1], u8aVal[0]);
 
-            MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_set_channel, (unsigned int)&uival);
-            MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_set_pan_id, (unsigned int)&u8aVal[0]);
+            ioctl(g_fd_rf_mac, RF_MAC_IOC_WR_CHANNEL, &uival);
+            ioctl(g_fd_rf_mac, RF_MAC_IOC_WR_PAN_ID, &u8aVal[0]);
             u8aVal[0] = 0; u8aVal[1] = 0;
-            MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_set_short_address, (unsigned int)&u8aVal[0]);
+            ioctl(g_fd_rf_mac, RF_MAC_IOC_WR_SHORT_ADDRESS, &u8aVal[0]);
         }
     }else
     	//if(g_setting.network_type == setting_network_type_router)
@@ -394,7 +280,7 @@ int main(void)
 		if(g_setting.network_type != setting_network_type_router){
 		    for(i = 0; i < 8 ; i++)
 		        u8aVal[i] = i;
-		    MAC_mrf24j40_ioctl(&g_rf_mac, mac_mrf24j40_ioc_set_long_address, (unsigned int)u8aVal);
+		    ioctl(g_fd_rf_mac, RF_MAC_IOC_WR_LONG_ADDRESS, u8aVal);
 		}
 
     	int found = 0;
@@ -425,10 +311,10 @@ int main(void)
 								LREP("done with address %04X\r\n", join_info.address);
 								u8aVal[0] = join_info.address & 0x00FF;
 								u8aVal[1] = (join_info.address >> 8) & 0x00FF;
-								MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_set_short_address, (unsigned int)&u8aVal[0]);
+								ioctl(g_fd_rf_mac, RF_MAC_IOC_WR_SHORT_ADDRESS, &u8aVal[0]);
 								u8aVal[0] = nwk_info[nwk_index].panId & 0x00FF;
 								u8aVal[1] = (nwk_info[nwk_index].panId >> 8) & 0x00FF;
-								MAC_mrf24j40_ioctl(g_nwk.mac, mac_mrf24j40_ioc_set_pan_id, (unsigned int)&u8aVal[0]);
+								ioctl(g_fd_rf_mac, RF_MAC_IOC_WR_PAN_ID, &u8aVal[0]);
 								// ping test
 								LREP("Ping test connection ...");
 								Network_echo_request(&g_nwk, nwk_info[nwk_index].address, 10, 95, &info, 0);
@@ -499,34 +385,4 @@ void *Thread_UserInput(void *param){
 	}
     while(1){sleep(1);}
 }
-void* Thread_PhyIntr(void* param){
-#if defined(OS_LINUX)
-	unsigned char rx[5];
-#endif
-    int timeout = 1000;
-    struct pollfd poll_fd[1];
-    while(!is_app_term()){
-		poll_fd[0].fd = g_rf_mac_open.fd_intr;
-		poll_fd[0].events = POLLPRI;
-		poll_fd[0].revents = 0;
-		lseek(g_rf_mac_open.fd_intr, 0, SEEK_SET);
-		int ret = poll(&poll_fd[0], 1, timeout);
-		if (ret > 0 && ((poll_fd[0].revents & POLLPRI) != 0))  {
-#if defined(OS_LINUX)
-			ret = read(g_rf_mac_open.fd_intr, &rx, 5);
-#endif
-			MAC_mrf24j40_ioctl(&g_rf_mac, mac_mrf24j40_ioc_trigger_interrupt, 0);
-		}
-    }
-    return 0;
-}
-void *Thread_MiwiTask(void*param){
-    while(!is_app_term()){
-        if(MAC_mrf24j40_select(&g_rf_mac, 1000)){
-            MAC_mrf24j40_task(&g_rf_mac);
-        }
-    }
-    return 0;
-}
-
 
